@@ -38,7 +38,7 @@ SLEEP_INTERVAL_MINUTES = 1
 JSON_FILE = 'sh.json'
 
 # ---- إعدادات الربح ----
-MIN_PROFIT_USD = 0.5                    
+MIN_PROFIT_USD = 0.05                    
 TAKER_FEE_PERCENT = 0.001               
 
 # ---- إعدادات البروكسي ----

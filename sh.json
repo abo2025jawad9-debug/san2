@@ -35,6 +35,18 @@
             "total_cost": 9.5735,
             "break_even_price": 63823.59,
             "min_sell_price": 67156.93
+        },
+        "buy_ffc8841f": {
+            "type": "buy",
+            "date": "2026-06-21",
+            "time": "23:29:26.794826",
+            "buy_price": 63649.28,
+            "qty": 0.00015,
+            "buy_amount_usd": 10.0,
+            "buy_fee_usd": 0.0095,
+            "total_cost": 9.5665,
+            "break_even_price": 63776.58,
+            "min_sell_price": 67109.91
         }
     },
     "open_positions": [
@@ -70,6 +82,17 @@
             "min_sell_price": 67156.92573333332,
             "date": "2026-06-21",
             "time": "23:28:26.736253"
+        },
+        {
+            "id": "buy_ffc8841f",
+            "buy_price": 63649.28,
+            "qty": 0.00015,
+            "buy_fee_usd": 0.00954747,
+            "total_cost": 9.566486861999998,
+            "break_even_price": 63776.57907999999,
+            "min_sell_price": 67109.91241333332,
+            "date": "2026-06-21",
+            "time": "23:29:26.794826"
         }
     ]
 }

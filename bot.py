@@ -4,6 +4,7 @@ import json
 import uuid
 import requests
 import subprocess
+import concurrent.futures
 from datetime import datetime
 from dataclasses import dataclass
 from binance.client import Client
@@ -37,40 +38,36 @@ SLEEP_INTERVAL_MINUTES = 1
 JSON_FILE = 'sh.json'
 
 # ---- إعدادات الربح ----
-MIN_PROFIT_USD = 0.5                    # نصف دولار كحد أدنى
-TAKER_FEE_PERCENT = 0.001               # 0.1% رسوم السوق
+MIN_PROFIT_USD = 0.5                    
+TAKER_FEE_PERCENT = 0.001               
 
 # ---- إعدادات البروكسي ----
-# تم تعطيل البروكسي لضمان استقرار الاتصال بشبكة Testnet أثناء الاختبار
-USE_PROXY = False                        
+# تم تفعيله إجبارياً لأن خوادم GitHub Actions في أمريكا وباينانس تحظرها
+USE_PROXY = True                        
 PROXY_LIST = []
 client = None
 
 # ================= إعدادات إعادة المحاولة =================
-MAX_RETRIES = 3                         # الحد الأقصى لإعادة المحاولة لكل بروكسي
-RETRY_DELAY_SECONDS = 5                 # التأخير بين المحاولات
-PROXY_ROTATION_DELAY = 10               # التأخير عند تبديل البروكسي
+MAX_RETRIES = 3                         
+RETRY_DELAY_SECONDS = 5                 
 
-# ================= جلب البروكسيات المجانية =================
+# ================= جلب واختبار البروكسيات =================
 
 def fetch_free_proxies():
-    """جلب بروكسيات مجانية من مصادر عامة."""
+    """جلب بروكسيات مجانية والتركيز على الدول المسموح بها في باينانس (مثل أوروبا)"""
     proxies = []
     sources = [
-        "https://api.proxyscrape.com/v2/?request=get&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all&simplified=true",
-        "https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt",
-        "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
-        "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt",
-        "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all",
-        "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
+        # جلب بروكسيات من دول أوروبية لتجنب الحظر الأمريكي
+        "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=de,fr,gb,nl,it,es,ch,se,no,dk,fi,pl&ssl=all&anonymity=elite,anonymous",
         "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
+        "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
     ]
 
-    print("🔍 جاري جلب قائمة البروكسيات المجانية...")
+    print("🔍 جاري جلب قائمة البروكسيات...")
 
     for source in sources:
         try:
-            response = requests.get(source, timeout=15)
+            response = requests.get(source, timeout=10)
             if response.status_code == 200:
                 lines = response.text.strip().split('\n')
                 for line in lines:
@@ -79,100 +76,87 @@ def fetch_free_proxies():
                         proxy_url = f"http://{line}"
                         if proxy_url not in proxies:
                             proxies.append(proxy_url)
-                print(f"  ✅ {source.split('/')[2]}: {len(lines)} بروكسي")
-        except Exception as e:
-            print(f"  ❌ فشل جلب {source}: {e}")
+        except Exception:
+            pass
 
-    proxies = list(dict.fromkeys(proxies))[:100]
-    print(f"📊 إجمالي بروكسيات فريدة: {len(proxies)}")
+    proxies = list(dict.fromkeys(proxies))
+    print(f"📊 إجمالي البروكسيات التي تم جلبها: {len(proxies)}")
     return proxies
 
 def test_proxy(proxy_url):
-    """اختبار البروكسي مع شبكة Binance Testnet"""
+    """اختبار البروكسي مع شبكة Binance Testnet وتخطي المحظور"""
     try:
         proxies = {"http": proxy_url, "https": proxy_url}
         start = time.time()
-        # تم تعديل الرابط ليتوافق مع Testnet الوهمية
+        # فحص استجابة باينانس المباشرة (إذا كان بروكسي أمريكي سيعطي خطأ ولن يعود بـ 200)
         response = requests.get(
             "https://testnet.binance.vision/api/v3/ping",
             proxies=proxies,
-            timeout=8
+            timeout=5
         )
-        latency = time.time() - start
         if response.status_code == 200:
-            return latency
+            return time.time() - start
         return None
     except:
         return None
 
-def get_best_proxy():
-    """اختبار البروكسيات وإرجاع الأفضل"""
+def get_working_proxy():
+    """استخدام تقنية المسارات المتوازية لفحص عشرات البروكسيات في نفس اللحظة للسرعة"""
     global PROXY_LIST
 
     if not PROXY_LIST:
         PROXY_LIST = fetch_free_proxies()
 
-    if not PROXY_LIST:
-        return None
-
-    print("⚡ جاري اختبار سرعة البروكسيات...")
-    working = []
-
-    for proxy in PROXY_LIST[:20]:
-        latency = test_proxy(proxy)
-        if latency:
-            working.append((proxy, latency))
-            print(f"  ✅ {proxy.split('@')[-1] if '@' in proxy else proxy} - {latency:.2f}s")
-        else:
-            print(f"  ❌ فاشل")
-
-    if working:
-        working.sort(key=lambda x: x[1])
-        best = working[0][0]
-        print(f"🏆 أفضل بروكسي: {best.split('@')[-1] if '@' in best else best} ({working[0][1]:.2f}s)")
-        return {"http": best, "https": best}
-
-    print("❌ لا يوجد بروكسي يعمل!")
+    print(f"⚡ جاري فحص سرعة {len(PROXY_LIST)} بروكسيات بالتوازي...")
+    
+    # فحص 20 بروكسي في نفس الوقت بدلاً من واحد تلو الآخر
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        future_to_proxy = {executor.submit(test_proxy, p): p for p in PROXY_LIST}
+        for future in concurrent.futures.as_completed(future_to_proxy):
+            proxy = future_to_proxy[future]
+            latency = future.result()
+            
+            if latency:
+                print(f"🏆 تم العثور على بروكسي ممتاز: {proxy.split('@')[-1] if '@' in proxy else proxy} (السرعة: {latency:.2f}ث)")
+                return {"http": proxy, "https": proxy}
+            else:
+                if proxy in PROXY_LIST:
+                    PROXY_LIST.remove(proxy)
+                    
     return None
 
 def init_client():
-    """تهيئة عميل Binance لشبكة Testnet"""
+    """تهيئة عميل Binance وضمان تجاوز حظر الموقع الجغرافي"""
     global client, PROXY_LIST
 
     print("🚀 بدء تهيئة الاتصال بشبكة Binance Testnet...")
 
     while True:
-        proxy = get_best_proxy() if USE_PROXY else None
+        proxy = get_working_proxy()
+        
+        if proxy:
+            try:
+                print("🔄 جاري محاولة تسجيل الدخول الفعلي وتخطي الحظر الجغرافي...")
+                client = Client(API_KEY, API_SECRET, testnet=True, requests_params={"proxies": proxy})
+                
+                # فحص قوي: محاولة جلب بيانات الحساب للتأكد من أن البروكسي مسموح به تماماً
+                client.get_account()
+                
+                print(f"✅ الاتصال وتسجيل الدخول بـ Binance Testnet ناجح! (البروكسي: {proxy['http']})")
+                return True
 
-        if not USE_PROXY or proxy:
-            for attempt in range(1, MAX_RETRIES + 1):
-                try:
-                    if proxy:
-                        session = requests.Session()
-                        session.proxies = proxy
-                        # إضافة testnet=True هنا
-                        client = Client(API_KEY, API_SECRET, testnet=True, requests_params={"proxies": proxy})
-                    else:
-                        # إضافة testnet=True هنا
-                        client = Client(API_KEY, API_SECRET, testnet=True)
-
-                    client.ping()
-                    print(f"✅ الاتصال بـ Binance Testnet ناجح! (بروكسي: {proxy['http'] if proxy else 'بدون بروكسي'})")
-                    return True
-
-                except Exception as e:
-                    print(f"  ⚠️ فشل الاتصال (محاولة {attempt}/{MAX_RETRIES}): {e}")
-                    if attempt < MAX_RETRIES:
-                        print(f"  ⏳ إعادة المحاولة بعد {RETRY_DELAY_SECONDS} ثواني...")
-                        time.sleep(RETRY_DELAY_SECONDS)
-                    else:
-                        print(f"  ❌ فشلت الـ {MAX_RETRIES} محاولات بهذا البروكسي.")
+            except BinanceAPIException as e:
+                print(f"  ⚠️ رفضت باينانس هذا البروكسي (السبب: {e}) - جاري حذفه وتجربة غيره.")
+                if proxy['http'] in PROXY_LIST:
+                    PROXY_LIST.remove(proxy['http'])
+            except Exception as e:
+                print(f"  ⚠️ البروكسي ضعيف أو انقطع الاتصال - جاري حذفه.")
+                if proxy['http'] in PROXY_LIST:
+                    PROXY_LIST.remove(proxy['http'])
         else:
-            print("❌ لا يوجد بروكسي يعمل حالياً.")
-
-        print("🔄 جلب بروكسيات جديدة والمحاولة مرة أخرى...")
-        PROXY_LIST = []
-        time.sleep(PROXY_ROTATION_DELAY)
+            print("🔄 القائمة نفدت. جاري جلب بروكسيات جديدة...")
+            PROXY_LIST = []
+            time.sleep(3)
 
 # ================= إشعارات التليجرام =================
 
@@ -192,16 +176,10 @@ def send_telegram_message(message):
             response = requests.post(url, json=payload, timeout=10)
             if response.status_code == 200:
                 return True
-            else:
-                print(f"  ⚠️ Telegram محاولة {attempt} فشلت: HTTP {response.status_code}")
-        except Exception as e:
-            print(f"  ⚠️ Telegram محاولة {attempt} فشلت: {e}")
-
+        except Exception:
+            pass
         if attempt < MAX_RETRIES:
             time.sleep(3)
-        else:
-            print(f"  ❌ فشل إرسال Telegram بعد {MAX_RETRIES} محاولات. سيتم التخطي.")
-
     return False
 
 # ================= إدارة الملفات =================
@@ -230,12 +208,9 @@ def git_commit_and_push():
                 subprocess.run(['git', 'commit', '-m', 'update'], check=True)
                 subprocess.run(['git', 'push'], check=True)
             return True
-        except Exception as e:
-            print(f"  ⚠️ Git محاولة {attempt} فشلت: {e}")
+        except Exception:
             if attempt < MAX_RETRIES:
                 time.sleep(2)
-            else:
-                print(f"  ❌ فشل Git بعد {MAX_RETRIES} محاولات. سيتم التخطي.")
     return False
 
 # ================= حسابات التكلفة والربح =================
@@ -269,12 +244,9 @@ def get_prices():
             past = float(klines[0][4])
             return current, past
         except Exception as e:
-            print(f"  ⚠️ فشل جلب الأسعار (محاولة {attempt}/{MAX_RETRIES}): {e}")
             if attempt < MAX_RETRIES:
-                print(f"  ⏳ إعادة المحاولة بعد {RETRY_DELAY_SECONDS} ثواني...")
                 time.sleep(RETRY_DELAY_SECONDS)
             else:
-                print(f"  ❌ فشل جلب الأسعار بعد {MAX_RETRIES} محاولات. سيتم التخطي.")
                 return None, None
     return None, None
 
@@ -307,20 +279,16 @@ def execute_buy():
                         bnb = float(client.get_symbol_ticker(symbol='BNBUSDT')['price'])
                         total_fee += fee * bnb
                     except:
-                        pass # التجاهل إذا لم يكن BNB متوفراً في Testnet
+                        pass 
 
             actual_price = total_cost / total_qty if total_qty > 0 else current_price
             return order, total_fee, total_qty, actual_price, total_cost
 
         except Exception as e:
-            print(f"  ⚠️ فشل الشراء (محاولة {attempt}/{MAX_RETRIES}): {e}")
             if attempt < MAX_RETRIES:
-                print(f"  ⏳ إعادة المحاولة بعد {RETRY_DELAY_SECONDS} ثواني...")
-                send_telegram_message(f"⚠️ فشل شراء (محاولة {attempt}/{MAX_RETRIES})، إعادة المحاولة...\nالخطأ: {str(e)[:100]}")
                 time.sleep(RETRY_DELAY_SECONDS)
             else:
-                print(f"  ❌ فشل الشراء بعد {MAX_RETRIES} محاولات. سيتم التخطي.")
-                send_telegram_message(f"❌ <b>فشل الشراء بعد {MAX_RETRIES} محاولات!</b>\nالخطأ: {str(e)[:200]}\nسيتم التخطي والانتقال للدورة التالية.")
+                send_telegram_message(f"❌ <b>فشل الشراء بعد محاولات!</b>\nالخطأ: {str(e)[:200]}")
                 return None, 0, 0, 0, 0
 
     return None, 0, 0, 0, 0
@@ -365,16 +333,10 @@ def execute_sell(qty):
             return order, total_received, total_fee, actual_price
 
         except Exception as e:
-            print(f"  ⚠️ فشل البيع (محاولة {attempt}/{MAX_RETRIES}): {e}")
             if attempt < MAX_RETRIES:
-                print(f"  ⏳ إعادة المحاولة بعد {RETRY_DELAY_SECONDS} ثواني...")
-                send_telegram_message(f"⚠️ فشل بيع (محاولة {attempt}/{MAX_RETRIES})، إعادة المحاولة...\nالخطأ: {str(e)[:100]}")
                 time.sleep(RETRY_DELAY_SECONDS)
             else:
-                print(f"  ❌ فشل البيع بعد {MAX_RETRIES} محاولات. سيتم التخطي.")
-                send_telegram_message(f"❌ <b>فشل البيع بعد {MAX_RETRIES} محاولات!</b>\nالخطأ: {str(e)[:200]}\nسيتم الاحتفاظ بالمركز للدورة التالية.")
                 return None, 0, 0, 0
-
     return None, 0, 0, 0
 
 # ================= فحص وبيع المراكز =================
@@ -441,12 +403,10 @@ def check_and_sell(history, current_price):
                     f"📉 رسوم شراء: <code>{buy_fee:.4f}</code>\n"
                     f"📉 رسوم بيع: <code>{sell_fee:.4f}</code>\n"
                     f"💚 <b>ربح صافي: {actual_profit:.4f} USDT</b>\n"
-                    f"📈 نسبة: <code>{(actual_profit/total_cost)*100:.2f}%</code>\n\n"
-                    f"✅ <b>لم يتم البيع بخسارة!</b>"
+                    f"📈 نسبة: <code>{(actual_profit/total_cost)*100:.2f}%</code>"
                 )
                 send_telegram_message(msg)
             else:
-                print(f"     ⚠️ فشل البيع بعد {MAX_RETRIES} محاولات. الاحتفاظ بالمركز.")
                 remaining.append(pos)
         else:
             remaining.append(pos)
@@ -471,8 +431,8 @@ def main():
         f"🚀 <b>السكربت يعمل الآن على الشبكة الوهمية Testnet!</b>\n"
         f"⏱ المدة: {RUN_DURATION_HOURS} ساعات\n"
         f"💰 الحد الأدنى للربح: {MIN_PROFIT_USD} USDT\n"
-        f"🔄 الحد الأقصى لإعادة المحاولة: {MAX_RETRIES}\n"
-        f"🛡 <b>لا بيع بخسارة أبداً!</b>"
+        f"🛡 <b>لا بيع بخسارة أبداً!</b>\n"
+        f"🌐 <b>تم تفعيل بروكسي لتجاوز حظر GitHub Actions.</b>"
     )
 
     while time.time() < end_time:
@@ -500,7 +460,7 @@ def main():
                             if d.get('date') == today and d.get('type') == 'buy')
 
             if todays_buys >= MAX_BUYS_PER_DAY:
-                print(f"⏳ الحد اليومي ({MAX_BUYS_PER_DAY})")
+                print(f"⏳ الحد اليومي للمشتريات ({MAX_BUYS_PER_DAY}) تم استنفاده.")
                 elapsed = time.time() - loop_start
                 sleep_time = max(0, (SLEEP_INTERVAL_MINUTES * 60) - elapsed)
                 time.sleep(sleep_time)
@@ -510,7 +470,7 @@ def main():
             print(f"📊 الحالي: {current_price:.2f} | قبل ساعة: {price_1h_ago:.2f} | الفارق: {diff:.2f}")
 
             if diff >= PRICE_DROP_THRESHOLD:
-                print(f"🎯 هبوط {diff:.2f}$! شراء...")
+                print(f"🎯 هبوط {diff:.2f}$! جاري الشراء...")
 
                 order, fee, qty, actual_price, total_cost = execute_buy()
 
@@ -572,20 +532,19 @@ def main():
                 send_telegram_message(msg)
 
         except Exception as e:
-            error = f"⚠️ خطأ: {str(e)[:200]}"
-            print(error)
-            send_telegram_message(error)
-
-            if "IP" in str(e) or "banned" in str(e).lower() or "connection" in str(e).lower():
-                print("🔄 إعادة تهيئة الاتصال...")
-                time.sleep(5)
+            error_str = str(e)
+            print(f"⚠️ خطأ أثناء دورة العمل: {error_str[:200]}")
+            
+            # إذا تعطل البروكسي فجأة أثناء التداول، نقوم بجلبه مرة أخرى
+            if "connection" in error_str.lower() or "proxy" in error_str.lower() or "read" in error_str.lower():
+                print("🔄 فقدان الاتصال بالبروكسي. إعادة التهيئة...")
                 init_client()
 
         elapsed = time.time() - loop_start
         sleep_time = max(0, (SLEEP_INTERVAL_MINUTES * 60) - elapsed)
         time.sleep(sleep_time)
 
-    send_telegram_message("🛑 انتهت الـ 6 ساعات.")
+    send_telegram_message("🛑 انتهت الـ 6 ساعات للسكربت.")
 
 if __name__ == "__main__":
     main()

@@ -1,1 +1,29 @@
-
+{
+    "operations": {
+        "buy_e1055eed": {
+            "type": "buy",
+            "date": "2026-06-21",
+            "time": "23:17:26.331347",
+            "buy_price": 63715.2,
+            "qty": 0.00015,
+            "buy_amount_usd": 10.0,
+            "buy_fee_usd": 0.0096,
+            "total_cost": 9.5764,
+            "break_even_price": 63842.63,
+            "min_sell_price": 67175.96
+        }
+    },
+    "open_positions": [
+        {
+            "id": "buy_e1055eed",
+            "buy_price": 63715.2,
+            "qty": 0.00015,
+            "buy_fee_usd": 0.00955728,
+            "total_cost": 9.576394559999999,
+            "break_even_price": 63842.6304,
+            "min_sell_price": 67175.96373333334,
+            "date": "2026-06-21",
+            "time": "23:17:26.331347"
+        }
+    ]
+}

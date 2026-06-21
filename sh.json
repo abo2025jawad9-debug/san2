@@ -71,6 +71,18 @@
             "total_cost": 9.5489,
             "break_even_price": 63659.32,
             "min_sell_price": 66992.66
+        },
+        "buy_090e2c66": {
+            "type": "buy",
+            "date": "2026-06-21",
+            "time": "23:32:26.939389",
+            "buy_price": 63448.01,
+            "qty": 0.00015,
+            "buy_amount_usd": 10.0,
+            "buy_fee_usd": 0.0095,
+            "total_cost": 9.5362,
+            "break_even_price": 63574.91,
+            "min_sell_price": 66908.24
         }
     },
     "open_positions": [
@@ -139,6 +151,17 @@
             "min_sell_price": 66992.65785333334,
             "date": "2026-06-21",
             "time": "23:31:26.899330"
+        },
+        {
+            "id": "buy_090e2c66",
+            "buy_price": 63448.009999999995,
+            "qty": 0.00015,
+            "buy_fee_usd": 0.0095172015,
+            "total_cost": 9.536235902999998,
+            "break_even_price": 63574.906019999995,
+            "min_sell_price": 66908.23935333332,
+            "date": "2026-06-21",
+            "time": "23:32:26.939389"
         }
     ]
 }

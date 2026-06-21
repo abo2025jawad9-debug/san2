@@ -64,6 +64,11 @@ def fetch_free_proxies():
         "https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt",
         "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
         "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt",
+
+        "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all",
+            "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
+          
+        
         "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
     ]
 

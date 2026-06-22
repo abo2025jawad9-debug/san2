@@ -49,7 +49,7 @@ client = None
 
 # ================= إعدادات إعادة المحاولة =================
 MAX_RETRIES = 3                         
-RETRY_DELAY_SECONDS = 5                 
+RETRY_DELAY_SECONDS = 2                 
 
 # ================= جلب واختبار البروكسيات =================
 
@@ -92,7 +92,7 @@ def test_proxy(proxy_url):
         response = requests.get(
             "https://testnet.binance.vision/api/v3/ping",
             proxies=proxies,
-            timeout=5
+            timeout=2
         )
         if response.status_code == 200:
             return time.time() - start

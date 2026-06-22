@@ -207,7 +207,7 @@ def get_prices():
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             current = float(client.get_symbol_ticker(symbol=SYMBOL)['price'])
-            klines = client.get_klines(symbol=SYMBOL, interval=Client.KLINE_INTERVAL_1HOUR, limit=2)
+            klines = client.get_klines(symbol=SYMBOL, interval=Client.KLINE_INTERVAL_5MINUTE, limit=2)
             past = float(klines[0][4])
             return current, past
         except Exception:

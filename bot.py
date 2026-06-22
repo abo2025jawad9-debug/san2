@@ -30,7 +30,7 @@ TELEGRAM_TOKEN = cfg.telegram_token
 TELEGRAM_CHAT_ID = cfg.telegram_chat_id
 
 SYMBOL = 'BTCUSDT'
-BUY_AMOUNT_USD = 10.0
+BUY_AMOUNT_USD = 20.0
 PRICE_DROP_THRESHOLD = 80.0
 MAX_BUYS_PER_DAY = 7
 RUN_DURATION_HOURS = 6
@@ -38,7 +38,7 @@ SLEEP_INTERVAL_MINUTES = 0.2
 JSON_FILE = 'sh.json'
 
 # ---- إعدادات الربح ----
-MIN_PROFIT_USD = 0.05                    
+MIN_PROFIT_USD = 0.001                    
 TAKER_FEE_PERCENT = 0.001               
 
 # ---- إعدادات البروكسي ----

@@ -28,5 +28,20 @@
         "break_even_price": 64131.92,
         "min_sell_price": 64135.15,
         "sell_details": {}
+    },
+    "buy_74bac2ec": {
+        "type": "buy",
+        "status": "معلقة - جاري الانتظار",
+        "date": "2026-06-22",
+        "time": "23:32:12.555980",
+        "buy_price": 64000.01,
+        "qty": 0.00031,
+        "sellable_qty": 0.00030969,
+        "buy_amount_usd": 20.0,
+        "buy_fee_usd": 0.0198,
+        "total_cost": 19.8797,
+        "break_even_price": 64128.01,
+        "min_sell_price": 64131.24,
+        "sell_details": {}
     }
 }

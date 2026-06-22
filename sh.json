@@ -71,6 +71,18 @@
             "total_cost": 9.6333,
             "break_even_price": 64222.2,
             "min_sell_price": 64555.53
+        },
+        "buy_fffa641e": {
+            "type": "buy",
+            "date": "2026-06-22",
+            "time": "08:38:23.394342",
+            "buy_price": 64080.02,
+            "qty": 0.00015,
+            "buy_amount_usd": 10.0,
+            "buy_fee_usd": 0.0096,
+            "total_cost": 9.6312,
+            "break_even_price": 64208.18,
+            "min_sell_price": 64541.51
         }
     },
     "open_positions": [
@@ -139,6 +151,17 @@
             "min_sell_price": 64555.53134333335,
             "date": "2026-06-22",
             "time": "08:37:23.437073"
+        },
+        {
+            "id": "buy_fffa641e",
+            "buy_price": 64080.01999999999,
+            "qty": 0.00015,
+            "buy_fee_usd": 0.0096120015,
+            "total_cost": 9.631227004499998,
+            "break_even_price": 64208.18002999999,
+            "min_sell_price": 64541.51336333333,
+            "date": "2026-06-22",
+            "time": "08:38:23.394342"
         }
     ]
 }

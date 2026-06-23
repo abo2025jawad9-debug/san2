@@ -44,6 +44,7 @@ TAKER_FEE_PERCENT = 0.001
 # ---- إعدادات البروكسي ----
 USE_PROXY = True                        
 PROXY_LIST = []
+CURRENT_PROXY = None
 client = None
 
 # ================= إعدادات إعادة المحاولة =================
@@ -107,7 +108,7 @@ def get_working_proxy():
     return None
 
 def init_client():
-    global client, PROXY_LIST
+    global client, PROXY_LIST, CURRENT_PROXY
     print("🚀 بدء تهيئة الاتصال بشبكة Binance Testnet...")
     while True:
         proxy = get_working_proxy()
@@ -116,6 +117,7 @@ def init_client():
                 print("🔄 جاري محاولة تسجيل الدخول الفعلي وتخطي الحظر الجغرافي...")
                 client = Client(API_KEY, API_SECRET, testnet=True, requests_params={"proxies": proxy})
                 client.get_account()
+                CURRENT_PROXY = proxy
                 print(f"✅ الاتصال وتسجيل الدخول ناجح! (البروكسي: {proxy['http']})")
                 return True
             except BinanceAPIException as e:
@@ -201,10 +203,11 @@ def calculate_sell_thresholds(buy_price, qty, buy_fee_usd):
         "min_sell_price": min_profit_price
     }
 
-# ================= التحقق من السعر الحقيقي (جديد) =================
+# ================= التحقق من السعر الحقيقي (مُصلح) =================
 
 def get_real_price_direct():
-    """جلب السعر مباشرة من Binance Testnet بدون بروكسي للتحقق"""
+    """جلب السعر مباشرة من Binance Testnet للتحقق - يحاول بدون بروكسي ثم مع البروكسي"""
+    # محاولة 1: بدون بروكسي
     try:
         response = requests.get(
             "https://testnet.binance.vision/api/v3/ticker/price?symbol=BTCUSDT",
@@ -212,27 +215,39 @@ def get_real_price_direct():
         )
         if response.status_code == 200:
             return float(response.json()['price'])
-    except Exception as e:
-        print(f"⚠️ فشل جلب السعر المباشر: {e}")
+    except Exception:
+        pass
+
+    # محاولة 2: مع البروكسي الحالي
+    try:
+        if CURRENT_PROXY:
+            response = requests.get(
+                "https://testnet.binance.vision/api/v3/ticker/price?symbol=BTCUSDT",
+                proxies=CURRENT_PROXY,
+                timeout=5
+            )
+            if response.status_code == 200:
+                return float(response.json()['price'])
+    except Exception:
+        pass
+
     return None
 
 def verify_proxy_price():
     """التحقق من السعر وإصلاح البروكسي إذا كان قديمًا"""
-    global client, PROXY_LIST
+    global client, PROXY_LIST, CURRENT_PROXY
 
-    real_price = get_real_price_direct()
-    if real_price is None:
-        print("⚠️ لم يتم جلب السعر الحقيقي، استخدام سعر البروكسي...")
-        return None
-
-    # جلب السعر من البوت (عبر البروكسي)
+    # جلب السعر من البروكسي دائمًا (لا يفشل)
     try:
         bot_price = float(client.get_symbol_ticker(symbol=SYMBOL)['price'])
     except Exception as e:
         print(f"⚠️ فشل جلب سعر البروكسي: {e}")
-        bot_price = None
+        return None
 
-    if bot_price and real_price:
+    # محاولة التحقق من السعر الحقيقي
+    real_price = get_real_price_direct()
+
+    if real_price is not None:
         diff = abs(real_price - bot_price)
         print(f"🤖 سعر البروكسي: {bot_price:.2f} | 🌐 السعر الحقيقي: {real_price:.2f} | 📊 الفرق: {diff:.2f}")
 
@@ -244,19 +259,21 @@ def verify_proxy_price():
         else:
             print("✅ البروكسي متزامن")
             return bot_price
-
-    return real_price
+    else:
+        # إذا فشل التحقق المباشر، استخدم سعر البروكسي على أي حال
+        print(f"⚠️ لم يتم جلب السعر الحقيقي، استخدام سعر البروكسي: {bot_price:.2f}")
+        return bot_price
 
 # ================= عمليات السوق =================
 
 def get_prices():
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            # التحقق من البروكسي أولاً
+            # التحقق من البروكسي - لا يُرجع None بسبب فشل التحقق المباشر
             current = verify_proxy_price()
 
             if current is None:
-                print("⏳ فشل التحقق من السعر، إعادة المحاولة...")
+                print("⏳ فشل جلب السعر من البروكسي، إعادة المحاولة...")
                 if attempt < MAX_RETRIES:
                     time.sleep(RETRY_DELAY_SECONDS)
                 continue

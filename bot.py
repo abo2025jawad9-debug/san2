@@ -6,6 +6,7 @@ import requests
 import subprocess
 import concurrent.futures
 from datetime import datetime
+from dataclasses import dataclass
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 
@@ -33,7 +34,7 @@ BUY_AMOUNT_USD = 20.0
 PRICE_DROP_THRESHOLD = 40.0
 MAX_BUYS_PER_DAY = 7
 RUN_DURATION_HOURS = 6
-SLEEP_INTERVAL_MINUTES = 0.05
+SLEEP_INTERVAL_MINUTES = 0.01
 JSON_FILE = 'sh.json'
 
 # ---- إعدادات الربح ----

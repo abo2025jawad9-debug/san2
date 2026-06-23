@@ -6,7 +6,6 @@ import requests
 import subprocess
 import concurrent.futures
 from datetime import datetime
-from dataclasses import dataclass
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 
@@ -34,7 +33,7 @@ BUY_AMOUNT_USD = 20.0
 PRICE_DROP_THRESHOLD = 40.0
 MAX_BUYS_PER_DAY = 7
 RUN_DURATION_HOURS = 6
-SLEEP_INTERVAL_MINUTES = 0.05
+SLEEP_INTERVAL_MINUTES = 0.01
 JSON_FILE = 'sh.json'
 
 # ---- إعدادات الربح ----
@@ -201,16 +200,72 @@ def calculate_sell_thresholds(buy_price, qty, buy_fee_usd):
         "min_sell_price": min_profit_price
     }
 
+# ================= التحقق من السعر الحقيقي (جديد) =================
+
+def get_real_price_direct():
+    """جلب السعر مباشرة من Binance Testnet بدون بروكسي للتحقق"""
+    try:
+        response = requests.get(
+            "https://testnet.binance.vision/api/v3/ticker/price?symbol=BTCUSDT",
+            timeout=5
+        )
+        if response.status_code == 200:
+            return float(response.json()['price'])
+    except Exception as e:
+        print(f"⚠️ فشل جلب السعر المباشر: {e}")
+    return None
+
+def verify_proxy_price():
+    """التحقق من السعر وإصلاح البروكسي إذا كان قديمًا"""
+    global client, PROXY_LIST
+
+    real_price = get_real_price_direct()
+    if real_price is None:
+        print("⚠️ لم يتم جلب السعر الحقيقي، استخدام سعر البروكسي...")
+        return None
+
+    # جلب السعر من البوت (عبر البروكسي)
+    try:
+        bot_price = float(client.get_symbol_ticker(symbol=SYMBOL)['price'])
+    except Exception as e:
+        print(f"⚠️ فشل جلب سعر البروكسي: {e}")
+        bot_price = None
+
+    if bot_price and real_price:
+        diff = abs(real_price - bot_price)
+        print(f"🤖 سعر البروكسي: {bot_price:.2f} | 🌐 السعر الحقيقي: {real_price:.2f} | 📊 الفرق: {diff:.2f}")
+
+        if diff > 5.0:
+            print(f"❌ البروكسي قديم! الفرق {diff:.2f} > 5.0")
+            send_telegram_message(f"⚠️ <b>البروكسي قديم!</b>\n🤖 سعر البروكسي: {bot_price:.2f}\n🌐 السعر الحقيقي: {real_price:.2f}\n📊 الفرق: {diff:.2f}\n🔄 جاري تغيير البروكسي...")
+            init_client()
+            return real_price
+        else:
+            print("✅ البروكسي متزامن")
+            return bot_price
+
+    return real_price
+
 # ================= عمليات السوق =================
 
 def get_prices():
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            current = float(client.get_symbol_ticker(symbol=SYMBOL)['price'])
+            # التحقق من البروكسي أولاً
+            current = verify_proxy_price()
+
+            if current is None:
+                print("⏳ فشل التحقق من السعر، إعادة المحاولة...")
+                if attempt < MAX_RETRIES:
+                    time.sleep(RETRY_DELAY_SECONDS)
+                continue
+
             klines = client.get_klines(symbol=SYMBOL, interval=Client.KLINE_INTERVAL_5MINUTE, limit=2)
             past = float(klines[0][4])
             return current, past
-        except Exception:
+
+        except Exception as e:
+            print(f"⚠️ خطأ في get_prices (محاولة {attempt}): {e}")
             if attempt < MAX_RETRIES:
                 time.sleep(RETRY_DELAY_SECONDS)
     return None, None
@@ -240,7 +295,7 @@ def execute_buy():
                     total_fee_usd += fee
                 elif fee_asset == 'BTC':
                     total_fee_usd += fee * current_price
-                    btc_fee += fee  # تتبع الكمية المخصومة كرسوم لتجنب مشاكل عدم كفاية الرصيد
+                    btc_fee += fee
                 elif fee_asset == 'BNB':
                     try:
                         bnb = float(client.get_symbol_ticker(symbol='BNBUSDT')['price'])
@@ -249,8 +304,8 @@ def execute_buy():
                         pass 
 
             actual_price = total_cost / total_qty if total_qty > 0 else current_price
-            sellable_qty = total_qty - btc_fee # الكمية الصافية المتاحة للبيع فعلياً بالمنصة
-            
+            sellable_qty = total_qty - btc_fee
+
             return order, total_fee_usd, total_qty, actual_price, total_cost, sellable_qty
 
         except Exception as e:
@@ -309,24 +364,21 @@ def execute_sell(qty):
 
 def check_and_sell(history, current_price):
     sold_any = False
-    
-    # فحص جميع العمليات المخزنة داخل قاموس sh.json مباشرة
+
     for op_id in list(history.keys()):
         pos = history[op_id]
-        
-        # التأكد من فحص العمليات التي حالتها "معلقة - جاري الانتظار" فقط وتخطي العمليات المباعة
+
         if pos.get('status') != "معلقة - جاري الانتظار":
             continue
 
         buy_price = pos['buy_price']
-        qty = pos.get('sellable_qty', pos['qty']) # استخدام الكمية الصافية المتاحة لتفادي مشاكل الرصيد
+        qty = pos.get('sellable_qty', pos['qty'])
         min_sell = pos['min_sell_price']
         total_cost = pos['total_cost']
         buy_fee = pos['buy_fee_usd']
 
         print(f"🔍 فحص العملية المستقلة [{op_id}]: شراء@{buy_price:.2f} | حالي@{current_price:.2f} | هدف البيع@{min_sell:.2f}")
 
-        # مقارنة السعر الحالي مع السعر المستهدف للعملية المحددة
         if current_price >= min_sell:
             print(f"🎯 السعر يتناسب مع العملية [{op_id}]! جاري تنفيذ أمر البيع...")
 
@@ -335,8 +387,7 @@ def check_and_sell(history, current_price):
             if order:
                 actual_profit = received - total_cost - sell_fee
                 sold_any = True
-                
-                # تغيير وإضافة كلمة "تم البيع" إلى العملية المخزنة لمنع بيعها مجدداً
+
                 pos['status'] = "تم البيع"
                 pos['sell_details'] = {
                     "sell_id": f"sell_{uuid.uuid4().hex[:8]}",
@@ -400,14 +451,12 @@ def main():
                 time.sleep(10)
                 continue
 
-            # استدعاء دالة المقارنة والبيع الذكي لكل عملية منفصلة
             sold, history = check_and_sell(history, current_price)
             if sold:
                 save_history(history)
                 git_commit_and_push()
                 history = load_history()
 
-            # حساب عدد صفقات الشراء اليومية بناءً على الهيكلة الجديدة
             today = datetime.utcnow().date().isoformat()
             todays_buys = sum(1 for op in history.values() 
                               if isinstance(op, dict) and op.get('date') == today and op.get('type') == 'buy')
@@ -436,7 +485,6 @@ def main():
                 op_id = f"buy_{uuid.uuid4().hex[:8]}"
                 now = datetime.utcnow()
 
-                # هيكلة البيانات الفريدة وحفظها بالحالة المبدئية "معلقة - جاري الانتظار"
                 buy_data = {
                     "type": "buy",
                     "status": "معلقة - جاري الانتظار",
@@ -444,7 +492,7 @@ def main():
                     "time": now.time().isoformat(),
                     "buy_price": round(actual_price, 2),
                     "qty": round(qty, 8),
-                    "sellable_qty": round(sellable_qty, 8),  # الكمية الآمنة التي سيتم استدعاؤها للبيع لاحقاً
+                    "sellable_qty": round(sellable_qty, 8),
                     "buy_amount_usd": BUY_AMOUNT_USD,
                     "buy_fee_usd": round(fee, 4),
                     "total_cost": round(calc['total_cost'], 4),
@@ -453,7 +501,6 @@ def main():
                     "sell_details": {}
                 }
 
-                # تخزين العملية باسمها الفريد مباشرة في الجذر
                 history[op_id] = buy_data
                 save_history(history)
                 git_commit_and_push()
@@ -487,3 +534,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

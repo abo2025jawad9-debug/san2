@@ -1,4 +1,4 @@
-name: Run Bybit Demo Trading Bot
+name: Run bot.py
 
 on:
   schedule:

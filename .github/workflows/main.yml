@@ -23,16 +23,17 @@ jobs:
           python-version: '3.11'
 
       - name: Install Dependencies
-        working-directory: ./san2
         run: |
+          cd san2
           python -m pip install --upgrade pip
           pip install pybit requests
 
       - name: Run Trading Script
-        working-directory: ./san2
         env:
           BYBIT_API_KEY: ${{ secrets.BYBIT_API_KEY }}
           BYBIT_API_SECRET: ${{ secrets.BYBIT_API_SECRET }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python bot.py
+        run: |
+          cd san2
+          python bot.py

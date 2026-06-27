@@ -114,6 +114,10 @@ def get_best_proxy():
 def init_client_with_retries():
     global client, PROXY_LIST
 
+    # إزالة أي بروكسي قديم لمنع التداخل
+    os.environ.pop("HTTP_PROXY", None)
+    os.environ.pop("HTTPS_PROXY", None)
+
     while True:
         for attempt in range(1, 4):
             print("[INIT] مُحَاوَلَةُ الاِتِّصَالِ %d/3..." % attempt)
@@ -123,7 +127,11 @@ def init_client_with_retries():
                 continue
 
             try:
-                client = HTTP(testnet=True, api_key=API_KEY, api_secret=API_SECRET, proxies=proxy)
+                # مكتبة Bybit تعتمد على بيئة النظام لقراءة البروكسي (تم إصلاح المشكلة هنا)
+                os.environ["HTTP_PROXY"] = proxy["http"]
+                os.environ["HTTPS_PROXY"] = proxy["https"]
+                
+                client = HTTP(testnet=True, api_key=API_KEY, api_secret=API_SECRET)
                 client.get_tickers(category="spot", symbol=SYMBOL)
                 print("[INIT] تَمَّ الاِتِّصَالُ! البُرُوكْسِي: %s" % proxy['http'])
                 return True
@@ -131,6 +139,9 @@ def init_client_with_retries():
                 print("[INIT] خَطَأٌ: %s" % e)
                 if proxy['http'] in PROXY_LIST:
                     PROXY_LIST.remove(proxy['http'])
+                # تفريغ البروكسي الفاشل
+                os.environ.pop("HTTP_PROXY", None)
+                os.environ.pop("HTTPS_PROXY", None)
             time.sleep(2)
 
         print("[INIT] فَشِلَتْ 3 مُحَاوَلَاتٍ. جَارِي إِعَادَةُ جَلْبِ البُرُوكْسِي...")
@@ -234,10 +245,14 @@ def execute_buy():
             )
             order_id = order['result']['orderId']
             
-            time.sleep(1) 
-            
-            exec_resp = client.get_executions(category="spot", orderId=order_id)
-            fills = exec_resp['result']['list']
+            # محاولة جلب تفاصيل التنفيذ المتأخرة
+            fills = []
+            for _ in range(5):
+                time.sleep(1)
+                exec_resp = client.get_executions(category="spot", orderId=order_id)
+                if exec_resp['result']['list']:
+                    fills = exec_resp['result']['list']
+                    break
             
             total_fee_usd = 0.0
             total_qty = 0.0
@@ -289,10 +304,14 @@ def execute_sell(qty):
             )
             order_id = order['result']['orderId']
             
-            time.sleep(1)
-            
-            exec_resp = client.get_executions(category="spot", orderId=order_id)
-            fills = exec_resp['result']['list']
+            # محاولة جلب تفاصيل التنفيذ المتأخرة
+            fills = []
+            for _ in range(5):
+                time.sleep(1)
+                exec_resp = client.get_executions(category="spot", orderId=order_id)
+                if exec_resp['result']['list']:
+                    fills = exec_resp['result']['list']
+                    break
             
             total_fee = 0.0
             total_received = 0.0

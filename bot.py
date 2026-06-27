@@ -27,10 +27,9 @@ API_SECRET = cfg.secret
 TELEGRAM_TOKEN = cfg.telegram_token
 TELEGRAM_CHAT_ID = cfg.telegram_chat_id
 
-CATEGORY = "spot"
 SYMBOL = 'SOLUSDT'
 BUY_AMOUNT_USD = 5.0
-TAKER_FEE_PERCENT = 0.001  # Bybit Spot VIP0 Taker = 0.1%
+TAKER_FEE_PERCENT = 0.001
 MIN_PROFIT_USD = 0.1  # هامش أمان فوق سعر التعادل لضمان عدم الخسارة مطلقا
 
 JSON_FILE = 'sh.json'
@@ -40,7 +39,7 @@ SLEEP_SECONDS = 1
 RUN_DURATION_HOURS = 6
 
 PROXY_LIST = []
-session = None
+client = None
 
 # ================= بروكسيات =================
 
@@ -75,7 +74,7 @@ def test_proxy(proxy_url):
     try:
         proxies = {"http": proxy_url, "https": proxy_url}
         start = time.time()
-        response = requests.get("https://api-demo.bybit.com/v5/market/time", proxies=proxies, timeout=3)
+        response = requests.get("https://api-testnet.bybit.com/v5/market/time", proxies=proxies, timeout=3)
         if response.status_code == 200:
             latency = time.time() - start
             return latency
@@ -113,7 +112,7 @@ def get_best_proxy():
     return {"http": best[0], "https": best[0]}
 
 def init_client_with_retries():
-    global session, PROXY_LIST
+    global client, PROXY_LIST
 
     while True:
         for attempt in range(1, 4):
@@ -124,28 +123,13 @@ def init_client_with_retries():
                 continue
 
             try:
-                # Set proxy environment variables for requests library
-                os.environ['HTTP_PROXY'] = proxy['http']
-                os.environ['HTTPS_PROXY'] = proxy['https']
-
-                session = HTTP(
-                    demo=True,
-                    api_key=API_KEY,
-                    api_secret=API_SECRET,
-                )
-
-                # Test connection with wallet balance
-                balance = session.get_wallet_balance(accountType="UNIFIED")
-                if balance.get("retCode") == 0:
-                    print("[INIT] تَمَّ الاِتِّصَالُ! البُرُوكْسِي: %s" % proxy['http'])
-                    return True
-                else:
-                    print("[INIT] فَشَلَتْ مُحَاوَلَةُ %d: %s" % (attempt, balance.get("retMsg")))
-                    if proxy['http'] in PROXY_LIST:
-                        PROXY_LIST.remove(proxy['http'])
+                client = HTTP(testnet=True, api_key=API_KEY, api_secret=API_SECRET, proxies=proxy)
+                client.get_tickers(category="spot", symbol=SYMBOL)
+                print("[INIT] تَمَّ الاِتِّصَالُ! البُرُوكْسِي: %s" % proxy['http'])
+                return True
             except Exception as e:
                 print("[INIT] خَطَأٌ: %s" % e)
-                if proxy and proxy['http'] in PROXY_LIST:
+                if proxy['http'] in PROXY_LIST:
                     PROXY_LIST.remove(proxy['http'])
             time.sleep(2)
 
@@ -197,7 +181,7 @@ def git_commit_and_push():
                 subprocess.run(['git', '--work-tree=' + os.getcwd(), 'push'], check=True)
             return True
         except Exception as e:
-            print("[GIT] فَشَلَ الرَّفْعُ: %s" % e)
+            print("[GIT] فَشِلَ الرَّفْعُ: %s" % e)
             time.sleep(2)
     return False
 
@@ -208,7 +192,7 @@ def calculate_sell_thresholds(buy_price, qty, buy_fee_usd):
     estimated_sell_fee = buy_cost * TAKER_FEE_PERCENT
     total_fees = buy_fee_usd + estimated_sell_fee
     total_cost = buy_cost + total_fees
-
+    
     break_even = total_cost / qty
     min_profit_price = (total_cost + MIN_PROFIT_USD) / qty
 
@@ -226,10 +210,10 @@ def calculate_sell_thresholds(buy_price, qty, buy_fee_usd):
 
 def get_current_price():
     try:
-        ticker = session.get_tickers(category=CATEGORY, symbol=SYMBOL)
-        price = float(ticker["result"]["list"][0]["lastPrice"])
-        print("[PRICE] السِّعْرُ الحَالِيُّ: %.2f" % price)
-        return price
+        resp = client.get_tickers(category="spot", symbol=SYMBOL)
+        ticker = float(resp['result']['list'][0]['lastPrice'])
+        print("[PRICE] السِّعْرُ الحَالِيُّ: %.2f" % ticker)
+        return ticker
     except Exception as e:
         print("[PRICE] فَشَلٌ فِي جَلْبِ السِّعْرِ: %s" % e)
         return None
@@ -237,83 +221,43 @@ def get_current_price():
 def execute_buy():
     for attempt in range(1, 4):
         try:
-            current_price = get_current_price()
-            if current_price is None:
-                current_price = 0
-
-            # Bybit Spot Market Buy: use quoteOrderQty for USDT amount
-            order = session.place_order(
-                category=CATEGORY,
+            ticker_resp = client.get_tickers(category="spot", symbol=SYMBOL)
+            current_price = float(ticker_resp['result']['list'][0]['lastPrice'])
+            
+            order = client.place_order(
+                category="spot",
                 symbol=SYMBOL,
                 side="Buy",
                 orderType="Market",
-                quoteOrderQty=str(BUY_AMOUNT_USD),
-                timeInForce="IOC"
+                qty=str(BUY_AMOUNT_USD),
+                marketUnit="quoteCoin"
             )
-
-            if order.get("retCode") != 0:
-                print("[BUY] فَشَلَتْ المُحَاوَلَةُ %d: %s" % (attempt, order.get("retMsg")))
-                time.sleep(2)
-                continue
-
-            order_id = order["result"]["orderId"]
-            print("[BUY] تَمَّ إِنشَاءُ الأَمْرِ: %s" % order_id)
-
-            # Wait for execution
-            time.sleep(1.5)
-
-            # Get order details
-            order_detail = session.get_order_history(
-                category=CATEGORY,
-                orderId=order_id
-            )
-
-            if order_detail.get("retCode") != 0 or not order_detail["result"]["list"]:
-                print("[BUY] فَشَلَ فِي الحُصُولِ عَلَى تَفَاصِيلِ الأَمْرِ")
-                time.sleep(2)
-                continue
-
-            order_info = order_detail["result"]["list"][0]
-
-            total_qty = float(order_info.get("cumExecQty", 0))
-            total_cost = float(order_info.get("cumExecValue", 0))
-            actual_price = float(order_info.get("avgPrice", 0)) if total_qty > 0 else current_price
-
-            # Estimate fee (Bybit Spot VIP0 taker = 0.1%)
-            total_fee_usd = total_cost * TAKER_FEE_PERCENT
+            order_id = order['result']['orderId']
+            
+            time.sleep(1) 
+            
+            exec_resp = client.get_executions(category="spot", orderId=order_id)
+            fills = exec_resp['result']['list']
+            
+            total_fee_usd = 0.0
+            total_qty = 0.0
+            total_cost = 0.0
             asset_fee = 0.0
-
-            # Try to get exact fee from executions
-            try:
-                executions = session.get_executions(
-                    category=CATEGORY,
-                    orderId=order_id
-                )
-                if executions.get("retCode") == 0 and executions["result"]["list"]:
-                    fee_usd = 0.0
-                    asset_fee = 0.0
-                    for exec in executions["result"]["list"]:
-                        exec_fee = float(exec.get("execFee", 0))
-                        fee_currency = exec.get("feeCurrency", "")
-                        exec_price = float(exec.get("execPrice", 0))
-
-                        if fee_currency == "USDT":
-                            fee_usd += exec_fee
-                        elif fee_currency == "SOL":
-                            fee_usd += exec_fee * exec_price
-                            asset_fee += exec_fee
-                        elif fee_currency == "BNB":
-                            bnb_ticker = session.get_tickers(category="spot", symbol="BNBUSDT")
-                            bnb_price = float(bnb_ticker["result"]["list"][0]["lastPrice"])
-                            fee_usd += exec_fee * bnb_price
-
-                    if fee_usd > 0:
-                        total_fee_usd = fee_usd
-            except Exception as fee_err:
-                print("[BUY] تَحْذِيرٌ: لَمْ يَتِمَّ الحُصُولُ عَلَى تَفَاصِيلِ الرَّسْمِ: %s" % fee_err)
-
+            
+            for fill in fills:
+                fee = float(fill['execFee']) 
+                qty = float(fill['execQty'])
+                price = float(fill['execPrice'])
+                
+                total_qty += qty
+                total_cost += qty * price
+                
+                asset_fee += fee
+                total_fee_usd += fee * price
+            
+            actual_price = total_cost / total_qty if total_qty > 0 else current_price
             sellable_qty = total_qty - asset_fee
-
+            
             return order, total_fee_usd, total_qty, actual_price, total_cost, sellable_qty
 
         except Exception as e:
@@ -326,10 +270,8 @@ def execute_buy():
 def execute_sell(qty):
     for attempt in range(1, 4):
         try:
-            # Get instrument info for qty step
-            info = session.get_instruments_info(category=CATEGORY, symbol=SYMBOL)
-            lot_filter = info["result"]["list"][0]["lotSizeFilter"]
-            step = float(lot_filter["qtyStep"])
+            info = client.get_instruments_info(category="spot", symbol=SYMBOL)
+            step = float(info['result']['list'][0]['lotSizeFilter']['basePrecision'])
             prec = len(str(step).split('.')[-1].rstrip('0')) if '.' in str(step) else 0
             qty = round(qty - (qty % step), prec)
 
@@ -337,60 +279,32 @@ def execute_sell(qty):
                 print("[SELL] الكَمِّيَّةُ صِفْرٌ بَعْدَ التَّقْرِيبِ")
                 return None, 0, 0, 0
 
-            order = session.place_order(
-                category=CATEGORY,
+            order = client.place_order(
+                category="spot",
                 symbol=SYMBOL,
                 side="Sell",
                 orderType="Market",
                 qty=str(qty),
-                timeInForce="IOC"
+                marketUnit="baseCoin"
             )
-
-            if order.get("retCode") != 0:
-                print("[SELL] فَشَلَتْ المُحَاوَلَةُ %d: %s" % (attempt, order.get("retMsg")))
-                time.sleep(2)
-                continue
-
-            order_id = order["result"]["orderId"]
-            time.sleep(1.5)
-
-            # Get execution details
+            order_id = order['result']['orderId']
+            
+            time.sleep(1)
+            
+            exec_resp = client.get_executions(category="spot", orderId=order_id)
+            fills = exec_resp['result']['list']
+            
             total_fee = 0.0
             total_received = 0.0
-
-            try:
-                executions = session.get_executions(
-                    category=CATEGORY,
-                    orderId=order_id
-                )
-                if executions.get("retCode") == 0 and executions["result"]["list"]:
-                    for exec in executions["result"]["list"]:
-                        exec_qty = float(exec.get("execQty", 0))
-                        exec_price = float(exec.get("execPrice", 0))
-                        exec_fee = float(exec.get("execFee", 0))
-                        fee_currency = exec.get("feeCurrency", "")
-
-                        total_received += exec_qty * exec_price
-
-                        if fee_currency == "USDT":
-                            total_fee += exec_fee
-                        elif fee_currency == "SOL":
-                            total_fee += exec_fee * exec_price
-                        elif fee_currency == "BNB":
-                            bnb_ticker = session.get_tickers(category="spot", symbol="BNBUSDT")
-                            bnb_price = float(bnb_ticker["result"]["list"][0]["lastPrice"])
-                            total_fee += exec_fee * bnb_price
-            except Exception as fee_err:
-                print("[SELL] تَحْذِيرٌ: لَمْ يَتِمَّ الحُصُولُ عَلَى تَفَاصِيلِ الرَّسْمِ: %s" % fee_err)
-
-            # Fallback to order history
-            if total_received == 0:
-                order_detail = session.get_order_history(category=CATEGORY, orderId=order_id)
-                if order_detail.get("retCode") == 0 and order_detail["result"]["list"]:
-                    order_info = order_detail["result"]["list"][0]
-                    total_received = float(order_info.get("cumExecValue", 0))
-                    total_fee = total_received * TAKER_FEE_PERCENT
-
+            
+            for fill in fills:
+                fee = float(fill['execFee']) 
+                qty_f = float(fill['execQty'])
+                price = float(fill['execPrice'])
+                
+                total_received += qty_f * price
+                total_fee += fee
+            
             actual_price = total_received / qty if qty > 0 else 0
             return order, total_received, total_fee, actual_price
 
@@ -586,7 +500,7 @@ def main():
 
     history = load_history()
     open_count = count_open_positions(history)
-
+    
     if open_count == 0:
         print("[START] لا توجد صفقات معلقة سابقة. سَيَبْدَأُ الفَحْصُ فِي الدَّوْرَةِ الرَّئِيسِيَّةِ...")
     else:
@@ -597,9 +511,9 @@ def main():
 
         try:
             history = load_history()
-
+            
             print("\n┌─────────────────────────────────────┐")
-
+            
             current_price = get_current_price()
             if current_price is None:
                 print("│ [LOOP] فَشَلٌ فِي جَلْبِ السِّعْرِ، جَارِي الإِعَادَةُ...")
@@ -607,7 +521,7 @@ def main():
                 continue
 
             open_count = count_open_positions(history)
-
+            
             print("│ [خُطْوَةُ 1] فَحْصُ البَيْعِ لِلْعَمَلِيَّاتِ المَفْتُوحَةِ (%d)" % open_count)
             sold, history = try_sell_all(history, current_price)
 
@@ -618,19 +532,19 @@ def main():
             else:
                 print("│ [النَّتِيجَةُ] لَمْ يَبِعْ → فَحْصُ إِعَادَةِ الشِّرَاءِ...")
                 if open_count < MAX_OPEN_POSITIONS:
-                    if current_price > 71.97:
+                    if current_price > 68.10:
                         print("│ [تَجَاوُزٌ] السِّعْرُ الحَالِيُّ (%.2f) أَكْبَرُ مِنْ 69.70. تَمَّ إِيقَافُ الشِّرَاءِ." % current_price)
                     else:
                         last_sell_time = get_last_sell_time(history)
                         wait_sell_ok = True
                         elapsed_since_sell = 0.0
-
+                        
                         if last_sell_time:
                             elapsed_since_sell = (datetime.utcnow() - last_sell_time).total_seconds() / 60
                             if elapsed_since_sell < 10.0:
                                 print("│ [تَجَاوُزٌ] اِنْتِظَارُ 10 دَقَائِقَ بَعْدَ البَيْعِ. (مَرَّتْ %.1f دَقِيقَة)" % elapsed_since_sell)
                                 wait_sell_ok = False
-
+                        
                         if wait_sell_ok:
                             if open_count == 0:
                                 abs_last_buy_price = get_absolute_last_buy_price(history)
@@ -638,7 +552,6 @@ def main():
                                     print("│ [شِرَاءٌ] لَا تُوجَدُ أَيُّ صَفَقَاتٍ فِي السِّجِلِّ! شِرَاءٌ فَوْرِيٌّ...")
                                     create_buy_operation()
                                 else:
-                                    # التعديل الجديد: تفريغ الذاكرة الزمنية بعد مرور 60 دقيقة (ساعة واحدة)
                                     if elapsed_since_sell >= 60.0:
                                         print("│ [شِرَاءٌ] مَرَّتْ سَاعَةٌ كَامِلَةٌ بِدُونِ صَفَقَاتٍ مَفْتُوحَةٍ (تَفْرِيغُ الذَّاكِرَةِ). تَجَاهُلُ آخِرِ سِعْرٍ (%.2f) وَالشِّرَاءُ الحَالِيُّ (%.2f)..." % (abs_last_buy_price, current_price))
                                         create_buy_operation()
@@ -661,7 +574,7 @@ def main():
         except Exception as e:
             error_str = str(e)
             print("[ERROR] %s" % error_str[:200])
-            if any(k in error_str.lower() for k in ["connection", "proxy", "read", "timeout", "api", "retcode"]):
+            if any(k in error_str.lower() for k in ["connection", "proxy", "read", "timeout", "api"]):
                 init_client_with_retries()
 
         elapsed = time.time() - loop_start
@@ -672,4 +585,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -74,7 +74,8 @@ def test_proxy(proxy_url):
     try:
         proxies = {"http": proxy_url, "https": proxy_url}
         start = time.time()
-        response = requests.get("https://api-testnet.bybit.com/v5/market/time", proxies=proxies, timeout=3)
+        # تم تعديل الرابط ليفحص سيرفر بايبت الحقيقي بدلاً من التجريبي
+        response = requests.get("https://api.bybit.com/v5/market/time", proxies=proxies, timeout=3)
         if response.status_code == 200:
             latency = time.time() - start
             return latency
@@ -131,7 +132,8 @@ def init_client_with_retries():
                 os.environ["HTTP_PROXY"] = proxy["http"]
                 os.environ["HTTPS_PROXY"] = proxy["https"]
                 
-                client = HTTP(testnet=True, api_key=API_KEY, api_secret=API_SECRET)
+                # تم تحويل testnet إلى False لكي يقبل مفاتيحك الحقيقية
+                client = HTTP(testnet=False, api_key=API_KEY, api_secret=API_SECRET)
                 client.get_tickers(category="spot", symbol=SYMBOL)
                 print("[INIT] تَمَّ الاِتِّصَالُ! البُرُوكْسِي: %s" % proxy['http'])
                 return True

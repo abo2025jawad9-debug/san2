@@ -15,6 +15,7 @@ from pybit.unified_trading import HTTP
 
 @dataclass
 class Config:
+    # تم تحديث المفاتيح للعمل على Bybit
     api_key: str = 'QgbaYIAuYv9Brf4cWu'
     secret: str = 'MNOYmeViGtW5Fkv43SJAychk01cptKmtWlYG'
     telegram_token: str = '8777604170:AAGVQWj7KtRZWKjZQ0BuyIZCHJ3FCmFgQP4'
@@ -74,8 +75,8 @@ def test_proxy(proxy_url):
     try:
         proxies = {"http": proxy_url, "https": proxy_url}
         start = time.time()
-        # تم التصحيح: توجيه الفحص إلى سيرفر Testnet
-        response = requests.get("https://api-testnet.bybit.com/v5/market/time", proxies=proxies, timeout=3)
+        # تم تغيير رابط الفحص ليتوافق مع Bybit
+        response = requests.get("https://api.bybit.com/v5/market/time", proxies=proxies, timeout=3)
         if response.status_code == 200:
             latency = time.time() - start
             return latency
@@ -115,35 +116,30 @@ def get_best_proxy():
 def init_client_with_retries():
     global client, PROXY_LIST
 
-    # إزالة أي بروكسي قديم لمنع التداخل
-    os.environ.pop("HTTP_PROXY", None)
-    os.environ.pop("HTTPS_PROXY", None)
-
     while True:
         for attempt in range(1, 4):
-            print("[INIT] مُحَاوَلَةُ الاِتِّصَالِ %d/3..." % attempt)
+            print("[INIT] مُحَاوَلَةُ الاِتِّصَالِ %d/3 بـ Bybit..." % attempt)
             proxy = get_best_proxy()
             if proxy is None:
                 time.sleep(3)
                 continue
 
             try:
-                # مكتبة Bybit تعتمد على بيئة النظام لقراءة البروكسي
-                os.environ["HTTP_PROXY"] = proxy["http"]
-                os.environ["HTTPS_PROXY"] = proxy["https"]
-                
-                # تم التصحيح: testnet=True للاتصال بالشبكة التجريبية
-                client = HTTP(testnet=True, api_key=API_KEY, api_secret=API_SECRET)
-                client.get_tickers(category="spot", symbol=SYMBOL)
+                # التهيئة لمكتبة Bybit (مال حقيقي)
+                client = HTTP(
+                    testnet=False,
+                    api_key=API_KEY,
+                    api_secret=API_SECRET,
+                    proxies=proxy
+                )
+                # فحص الاتصال بالحساب
+                client.get_wallet_balance(accountType="UNIFIED", coin="USDT")
                 print("[INIT] تَمَّ الاِتِّصَالُ! البُرُوكْسِي: %s" % proxy['http'])
                 return True
             except Exception as e:
-                print("[INIT] خَطَأٌ: %s" % e)
+                print("[INIT] تَمَّ رَفْضُ البُرُوكْسِي أو خطأ: %s" % e)
                 if proxy['http'] in PROXY_LIST:
                     PROXY_LIST.remove(proxy['http'])
-                # تفريغ البروكسي الفاشل
-                os.environ.pop("HTTP_PROXY", None)
-                os.environ.pop("HTTPS_PROXY", None)
             time.sleep(2)
 
         print("[INIT] فَشِلَتْ 3 مُحَاوَلَاتٍ. جَارِي إِعَادَةُ جَلْبِ البُرُوكْسِي...")
@@ -223,20 +219,34 @@ def calculate_sell_thresholds(buy_price, qty, buy_fee_usd):
 
 def get_current_price():
     try:
-        resp = client.get_tickers(category="spot", symbol=SYMBOL)
-        ticker = float(resp['result']['list'][0]['lastPrice'])
+        res = client.get_tickers(category="spot", symbol=SYMBOL)
+        ticker = float(res['result']['list'][0]['lastPrice'])
         print("[PRICE] السِّعْرُ الحَالِيُّ: %.2f" % ticker)
         return ticker
     except Exception as e:
         print("[PRICE] فَشَلٌ فِي جَلْبِ السِّعْرِ: %s" % e)
         return None
 
+def get_usdt_balance():
+    try:
+        # يدعم حسابات Bybit الموحدة (Unified)
+        res = client.get_wallet_balance(accountType="UNIFIED", coin="USDT")
+        balance = float(res['result']['list'][0]['coin'][0]['walletBalance'])
+        return balance
+    except Exception as e:
+        try:
+            # احتياطي للحسابات العادية (Spot)
+            res = client.get_wallet_balance(accountType="SPOT", coin="USDT")
+            balance = float(res['result']['list'][0]['coin'][0]['walletBalance'])
+            return balance
+        except Exception:
+            return 0.0
+
 def execute_buy():
     for attempt in range(1, 4):
         try:
-            ticker_resp = client.get_tickers(category="spot", symbol=SYMBOL)
-            current_price = float(ticker_resp['result']['list'][0]['lastPrice'])
-            
+            current_price = get_current_price()
+            # شراء ماركت في Bybit باستخدام مبلغ USDT
             order = client.place_order(
                 category="spot",
                 symbol=SYMBOL,
@@ -245,36 +255,33 @@ def execute_buy():
                 qty=str(BUY_AMOUNT_USD),
                 marketUnit="quoteCoin"
             )
-            order_id = order['result']['orderId']
             
-            # محاولة جلب تفاصيل التنفيذ المتأخرة
-            fills = []
-            for _ in range(5):
-                time.sleep(1)
-                exec_resp = client.get_executions(category="spot", orderId=order_id)
-                if exec_resp['result']['list']:
-                    fills = exec_resp['result']['list']
-                    break
+            order_id = order['result']['orderId']
+            time.sleep(1.5)  # إنتظار بسيط لضمان تنفيذ العملية قبل جلب الرسوم
+            
+            exec_res = client.get_executions(category="spot", orderId=order_id)
+            fills = exec_res['result']['list']
             
             total_fee_usd = 0.0
             total_qty = 0.0
             total_cost = 0.0
             asset_fee = 0.0
-            
+
             for fill in fills:
-                fee = float(fill['execFee']) 
+                fee = float(fill['execFee'])
                 qty = float(fill['execQty'])
                 price = float(fill['execPrice'])
                 
                 total_qty += qty
                 total_cost += qty * price
                 
+                # في بايبت لعمليات شراء السبوت تؤخذ العمولة من العملة المشتراة (SOL)
                 asset_fee += fee
                 total_fee_usd += fee * price
-            
+
             actual_price = total_cost / total_qty if total_qty > 0 else current_price
             sellable_qty = total_qty - asset_fee
-            
+
             return order, total_fee_usd, total_qty, actual_price, total_cost, sellable_qty
 
         except Exception as e:
@@ -287,9 +294,13 @@ def execute_buy():
 def execute_sell(qty):
     for attempt in range(1, 4):
         try:
+            # جلب الدقة المسموحة للعملة في Bybit لتجنب خطأ LOT_SIZE
             info = client.get_instruments_info(category="spot", symbol=SYMBOL)
-            step = float(info['result']['list'][0]['lotSizeFilter']['basePrecision'])
-            prec = len(str(step).split('.')[-1].rstrip('0')) if '.' in str(step) else 0
+            step_str = info['result']['list'][0]['lotSizeFilter']['basePrecision']
+            step = float(step_str)
+            prec = len(step_str.split('.')[-1].rstrip('0')) if '.' in step_str else 0
+            
+            # تقريب الكمية لتتوافق مع سياسة Bybit
             qty = round(qty - (qty % step), prec)
 
             if qty <= 0:
@@ -304,28 +315,25 @@ def execute_sell(qty):
                 qty=str(qty),
                 marketUnit="baseCoin"
             )
-            order_id = order['result']['orderId']
             
-            # محاولة جلب تفاصيل التنفيذ المتأخرة
-            fills = []
-            for _ in range(5):
-                time.sleep(1)
-                exec_resp = client.get_executions(category="spot", orderId=order_id)
-                if exec_resp['result']['list']:
-                    fills = exec_resp['result']['list']
-                    break
+            order_id = order['result']['orderId']
+            time.sleep(1.5) # إنتظار بسيط لضمان تنفيذ العملية قبل جلب الرسوم
+            
+            exec_res = client.get_executions(category="spot", orderId=order_id)
+            fills = exec_res['result']['list']
             
             total_fee = 0.0
             total_received = 0.0
-            
+
             for fill in fills:
-                fee = float(fill['execFee']) 
+                fee = float(fill['execFee'])
                 qty_f = float(fill['execQty'])
                 price = float(fill['execPrice'])
                 
                 total_received += qty_f * price
+                # في بايبت لعمليات بيع السبوت تؤخذ العمولة من عملة الـ USDT
                 total_fee += fee
-            
+
             actual_price = total_received / qty if qty > 0 else 0
             return order, total_received, total_fee, actual_price
 
@@ -415,12 +423,15 @@ def create_buy_operation():
     save_history(history)
     git_commit_and_push()
 
+    balance = get_usdt_balance()
+
     msg = (
-        "✅ <b>تَمَّ الشِّرَاءُ!</b>\n"
+        "✅ <b>تَمَّ الشِّرَاءُ بنجاح!</b>\n"
         f"المعرف: {op_id}\n"
         f"السعر: {actual_price:.2f}\n"
         f"سعر التعادل: {calc['break_even_price']:.2f}\n"
-        f"سعر البيع المطلوب: {calc['min_sell_price']:.2f}"
+        f"سعر البيع المطلوب: {calc['min_sell_price']:.2f}\n"
+        f"💳 <b>الرصيد المتاح:</b> {balance:.2f} USDT"
     )
     send_telegram_message(msg)
 
@@ -468,11 +479,14 @@ def try_sell_all(history, current_price):
                     "sell_time": datetime.utcnow().time().isoformat()
                 }
 
+                balance = get_usdt_balance()
+
                 msg = (
                     "💰 <b>تَمَّ البَيْعُ بِنَجَاحٍ!</b>\n"
                     f"المعرف: {op_id}\n"
                     f"الشراء: {buy_price:.2f} | البيع: {sell_price:.2f}\n"
-                    f"الربح الصافي الفعلي: {actual_profit:.4f} USDT"
+                    f"الربح الصافي الفعلي: {actual_profit:.4f} USDT\n"
+                    f"💳 <b>الرصيد المتاح:</b> {balance:.2f} USDT"
                 )
                 send_telegram_message(msg)
                 print("[SELL] تَمَّ البَيْعُ %s بِرِبْح=%.4f" % (op_id, actual_profit))
@@ -553,8 +567,8 @@ def main():
             else:
                 print("│ [النَّتِيجَةُ] لَمْ يَبِعْ → فَحْصُ إِعَادَةِ الشِّرَاءِ...")
                 if open_count < MAX_OPEN_POSITIONS:
-                    if current_price > 71.35:
-                        print("│ [تَجَاوُزٌ] السِّعْرُ الحَالِيُّ (%.2f) أَكْبَرُ مِنْ 71.35. تَمَّ إِيقَافُ الشِّرَاءِ." % current_price)
+                    if current_price > 68.10:
+                        print("│ [تَجَاوُزٌ] السِّعْرُ الحَالِيُّ (%.2f) أَكْبَرُ مِنْ 69.70. تَمَّ إِيقَافُ الشِّرَاءِ." % current_price)
                     else:
                         last_sell_time = get_last_sell_time(history)
                         wait_sell_ok = True
@@ -595,7 +609,7 @@ def main():
         except Exception as e:
             error_str = str(e)
             print("[ERROR] %s" % error_str[:200])
-            if any(k in error_str.lower() for k in ["connection", "proxy", "read", "timeout", "api"]):
+            if any(k in error_str.lower() for k in ["connection", "proxy", "read", "timeout", "api", "unauthorized"]):
                 init_client_with_retries()
 
         elapsed = time.time() - loop_start

@@ -15,7 +15,6 @@ from pybit.unified_trading import HTTP
 
 @dataclass
 class Config:
-    # تم تحديث المفاتيح للعمل على Bybit
     api_key: str = 'QgbaYIAuYv9Brf4cWu'
     secret: str = 'MNOYmeViGtW5Fkv43SJAychk01cptKmtWlYG'
     telegram_token: str = '8777604170:AAGVQWj7KtRZWKjZQ0BuyIZCHJ3FCmFgQP4'
@@ -37,7 +36,8 @@ JSON_FILE = 'sh.json'
 MAX_OPEN_POSITIONS = 5
 REBUY_WAIT_MINUTES = 7
 SLEEP_SECONDS = 1
-RUN_DURATION_HOURS = 6
+# تم ضبط الوقت على 5.8 لضمان الإغلاق الآمن وحفظ البيانات قبل إيقاف GitHub الإجباري بعد 6 ساعات
+RUN_DURATION_HOURS = 5.8 
 
 PROXY_LIST = []
 client = None
@@ -75,7 +75,7 @@ def test_proxy(proxy_url):
     try:
         proxies = {"http": proxy_url, "https": proxy_url}
         start = time.time()
-        # تم تغيير رابط الفحص ليتوافق مع Bybit
+        # الفحص يتجه الآن إلى واجهة Bybit
         response = requests.get("https://api.bybit.com/v5/market/time", proxies=proxies, timeout=3)
         if response.status_code == 200:
             latency = time.time() - start
@@ -125,21 +125,30 @@ def init_client_with_retries():
                 continue
 
             try:
-                # التهيئة لمكتبة Bybit (مال حقيقي)
+                # إجبار النظام على استخدام البروكسي لتجنب خطأ pybit غير الداعم لمتغير proxies
+                os.environ['HTTP_PROXY'] = proxy['http']
+                os.environ['HTTPS_PROXY'] = proxy['https']
+
+                # تهيئة عميل Bybit بالمال الحقيقي
                 client = HTTP(
                     testnet=False,
                     api_key=API_KEY,
-                    api_secret=API_SECRET,
-                    proxies=proxy
+                    api_secret=API_SECRET
                 )
+                
                 # فحص الاتصال بالحساب
                 client.get_wallet_balance(accountType="UNIFIED", coin="USDT")
-                print("[INIT] تَمَّ الاِتِّصَالُ! البُرُوكْسِي: %s" % proxy['http'])
+                print("[INIT] تَمَّ الاِتِّصَالُ بِنَجَاحٍ! البُرُوكْسِي: %s" % proxy['http'])
                 return True
             except Exception as e:
-                print("[INIT] تَمَّ رَفْضُ البُرُوكْسِي أو خطأ: %s" % e)
+                print("[INIT] تَمَّ رَفْضُ البُرُوكْسِي أَوْ حَدَثَ خَطَأٌ: %s" % e)
                 if proxy['http'] in PROXY_LIST:
                     PROXY_LIST.remove(proxy['http'])
+                
+                # تنظيف متغيرات البيئة قبل تجربة بروكسي آخر
+                os.environ.pop('HTTP_PROXY', None)
+                os.environ.pop('HTTPS_PROXY', None)
+            
             time.sleep(2)
 
         print("[INIT] فَشِلَتْ 3 مُحَاوَلَاتٍ. جَارِي إِعَادَةُ جَلْبِ البُرُوكْسِي...")
@@ -229,13 +238,13 @@ def get_current_price():
 
 def get_usdt_balance():
     try:
-        # يدعم حسابات Bybit الموحدة (Unified)
+        # جلب الرصيد لدعم الحسابات الموحدة في Bybit
         res = client.get_wallet_balance(accountType="UNIFIED", coin="USDT")
         balance = float(res['result']['list'][0]['coin'][0]['walletBalance'])
         return balance
     except Exception as e:
         try:
-            # احتياطي للحسابات العادية (Spot)
+            # احتياطي للحسابات الكلاسيكية (Spot)
             res = client.get_wallet_balance(accountType="SPOT", coin="USDT")
             balance = float(res['result']['list'][0]['coin'][0]['walletBalance'])
             return balance
@@ -246,7 +255,6 @@ def execute_buy():
     for attempt in range(1, 4):
         try:
             current_price = get_current_price()
-            # شراء ماركت في Bybit باستخدام مبلغ USDT
             order = client.place_order(
                 category="spot",
                 symbol=SYMBOL,
@@ -257,7 +265,7 @@ def execute_buy():
             )
             
             order_id = order['result']['orderId']
-            time.sleep(1.5)  # إنتظار بسيط لضمان تنفيذ العملية قبل جلب الرسوم
+            time.sleep(1.5)  # انتظار بسيط لمعالجة العملية وجلب رسوم التنفيذ
             
             exec_res = client.get_executions(category="spot", orderId=order_id)
             fills = exec_res['result']['list']
@@ -275,7 +283,6 @@ def execute_buy():
                 total_qty += qty
                 total_cost += qty * price
                 
-                # في بايبت لعمليات شراء السبوت تؤخذ العمولة من العملة المشتراة (SOL)
                 asset_fee += fee
                 total_fee_usd += fee * price
 
@@ -294,13 +301,12 @@ def execute_buy():
 def execute_sell(qty):
     for attempt in range(1, 4):
         try:
-            # جلب الدقة المسموحة للعملة في Bybit لتجنب خطأ LOT_SIZE
+            # معالجة دقة التداول لتجنب أخطاء المنصة
             info = client.get_instruments_info(category="spot", symbol=SYMBOL)
             step_str = info['result']['list'][0]['lotSizeFilter']['basePrecision']
             step = float(step_str)
             prec = len(step_str.split('.')[-1].rstrip('0')) if '.' in step_str else 0
             
-            # تقريب الكمية لتتوافق مع سياسة Bybit
             qty = round(qty - (qty % step), prec)
 
             if qty <= 0:
@@ -317,7 +323,7 @@ def execute_sell(qty):
             )
             
             order_id = order['result']['orderId']
-            time.sleep(1.5) # إنتظار بسيط لضمان تنفيذ العملية قبل جلب الرسوم
+            time.sleep(1.5)
             
             exec_res = client.get_executions(category="spot", orderId=order_id)
             fills = exec_res['result']['list']
@@ -331,7 +337,6 @@ def execute_sell(qty):
                 price = float(fill['execPrice'])
                 
                 total_received += qty_f * price
-                # في بايبت لعمليات بيع السبوت تؤخذ العمولة من عملة الـ USDT
                 total_fee += fee
 
             actual_price = total_received / qty if qty > 0 else 0

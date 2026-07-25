@@ -3,7 +3,7 @@ name: Bot Automation # هذا مجرد عنوان للمهمة في قيتهاب
 on:
   schedule:
     # يعمل عند الدقيقة 0 من كل 6 ساعات
-    - cron: '0 */65555 * * *'
+    - cron: '0 */23 * * *'
   workflow_dispatch: # زر للتشغيل اليدوي
 
 permissions:
@@ -31,4 +31,4 @@ jobs:
 
       - name: Run Trading Bot
         # هنا يتم تشغيل ملفك الذي اسمه bot.py
-        run: python bot.py
+        run: python -u bot.py

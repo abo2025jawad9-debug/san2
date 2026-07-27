@@ -35,7 +35,7 @@ MIN_PROFIT_USD = 0.2  # هامش أمان فوق سعر التعادل لضما�
 JSON_FILE = 'sh.json'
 MAX_OPEN_POSITIONS = 1
 REBUY_WAIT_MINUTES = 10
-SLEEP_SECONDS = 3
+SLEEP_SECONDS = 1
 # تم ضبط الوقت على 5.8 لضمان الإغلاق الآمن وحفظ البيانات قبل إيقاف GitHub الإجباري بعد 6 ساعات
 RUN_DURATION_HOURS = 5.8 
 

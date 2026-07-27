@@ -1,1 +1,19 @@
-
+{
+    "buy_af167bfd": {
+        "type": "buy",
+        "status": "معلقة - جاري الانتظار",
+        "date": "2026-07-27",
+        "time": "22:26:54.005556",
+        "buy_time": "2026-07-27T22:26:54.005556",
+        "buy_price": 75.26,
+        "qty": 0.0664,
+        "sellable_qty": 0.0663336,
+        "buy_amount_usd": 5.0,
+        "buy_fee_usd": 0.005,
+        "buy_cost": 4.9973,
+        "total_cost": 5.0073,
+        "break_even_price": 75.41,
+        "min_sell_price": 78.42,
+        "sell_details": {}
+    }
+}

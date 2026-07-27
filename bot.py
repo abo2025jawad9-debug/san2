@@ -28,12 +28,12 @@ TELEGRAM_TOKEN = cfg.telegram_token
 TELEGRAM_CHAT_ID = cfg.telegram_chat_id
 
 SYMBOL = 'SOLUSDT'
-BUY_AMOUNT_USD = 5.0
+BUY_AMOUNT_USD = 2.0
 TAKER_FEE_PERCENT = 0.001
-MIN_PROFIT_USD = 0.1  # هامش أمان فوق سعر التعادل لضمان عدم الخسارة مطلقا
+MIN_PROFIT_USD = 0.04  # هامش أمان فوق سعر التعادل لضمان عدم الخسارة مطلقا
 
 JSON_FILE = 'sh.json'
-MAX_OPEN_POSITIONS = 1
+MAX_OPEN_POSITIONS = 2
 REBUY_WAIT_MINUTES = 10
 SLEEP_SECONDS = 1
 # تم ضبط الوقت على 5.8 لضمان الإغلاق الآمن وحفظ البيانات قبل إيقاف GitHub الإجباري بعد 6 ساعات
@@ -572,7 +572,7 @@ def main():
             else:
                 print("│ [النَّتِيجَةُ] لَمْ يَبِعْ → فَحْصُ إِعَادَةِ الشِّرَاءِ...")
                 if open_count < MAX_OPEN_POSITIONS:
-                    if current_price > 75.30:
+                    if current_price > 74.20:
                         print("│ [تَجَاوُزٌ] السِّعْرُ الحَالِيُّ (%.2f) أَكْبَرُ مِنْ 69.70. تَمَّ إِيقَافُ الشِّرَاءِ." % current_price)
                     else:
                         last_sell_time = get_last_sell_time(history)

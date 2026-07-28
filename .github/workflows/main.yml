@@ -30,10 +30,10 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Trading Bot
-        # تمرير المفاتيح من GitHub Secrets إلى بيئة التشغيل
+        # تم تصحيح الأسماء لتتطابق تماماً مع ما هو موجود في إعدادات مستودعك
         env:
           BYBIT_API_KEY: ${{ secrets.BYBIT_API_KEY }}
-          BYBIT_API_SECRET: ${{ secrets.BYBIT_SECRET }}
+          BYBIT_API_SECRET: ${{ secrets.BYBIT_API_SECRET }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -u bot.py

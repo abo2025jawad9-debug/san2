@@ -15,10 +15,10 @@ from pybit.unified_trading import HTTP
 
 @dataclass
 class Config:
-    api_key: str = os.getenv('BYBIT_API_KEY', '')          # تم التعديل
-    secret: str = os.getenv('BYBIT_API_SECRET', '')        # تم التعديل
-    telegram_token: str = os.getenv('TELEGRAM_TOKEN', '')  # تم التعديل
-    telegram_chat_id: str = os.getenv('TELEGRAM_CHAT_ID', '') # تم التعديل
+    api_key: str = 'QgbaYIAuYv9Brf4cWu'
+    secret: str = 'MNOYmeViGtW5Fkv43SJAychk01cptKmtWlYG'
+    telegram_token: str = '8777604170:AAGVQWj7KtRZWKjZQ0BuyIZCHJ3FCmFgQP4'
+    telegram_chat_id: str = '6390985342'
 
 cfg = Config()
 

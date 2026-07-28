@@ -42,52 +42,6 @@ RUN_DURATION_HOURS = 5.8
 PROXY_LIST = []
 client = None
 
-
-# ... باقي الدوال كما هي (fetch_free_proxies, test_proxy, get_best_proxy, init_client_with_retries, send_telegram_message, load_history, save_history, git_commit_and_push, calculate_sell_thresholds, get_current_price, get_usdt_balance, execute_buy, execute_sell, try_sell_all, can_rebuy, main)
-
-# تأكد من إضافة استيراد dotenv في الأعلى
-```
-
-ملاحظة مهمة:
-
-· يحتاج التعديل أيضاً إلى إضافة python-dotenv إلى متطلبات التشغيل (requirements.txt).
-· إذا كنت ستستخدم GitHub Actions فقط، فيمكنك الاستغناء عن load_dotenv()، لكن إبقاؤه لا يضر (سيبحث عن ملف ولن يجده فلا يؤثر).
-
----
-
-الخطوات المطلوبة منك الآن (للتطبيق العملي)
-
-1. أنشئ ملف .env محلياً (للتجربة فقط) ولا ترفعه لـ GitHub أبداً
-
-ضع في ملف اسمه .env القيم الحقيقية (انسخ ما كنت تضعه في الكود):
-
-```
-BYBIT_API_KEY=QgbaYIAuYv9Brf4cWu
-BYBIT_API_SECRET=MNOYmeViGtW5Fkv43SJAychk01cptKmtWlYG
-TELEGRAM_TOKEN=8777604170:AAGVQWj7KtRZWKjZQ0BuyIZCHJ3FCmFgQP4
-TELEGRAM_CHAT_ID=6390985342
-```
-
-2. أضف إلى .gitignore السطر التالي (حتى لا يُرفع الملف):
-
-```
-.env
-```
-
-3. لو كنت تستخدم GitHub Actions:
-
-· أضف الأسرار كما شرحت سابقاً (بنفس الأسماء BYBIT_API_KEY إلخ).
-· في ملف الـ workflow مررها كـ env: بنفس الأسماء.
-
-4. شغّل الكود:
-
-· محلياً: python main.py (سيقرأ .env تلقائياً).
-· على GitHub: سيعمل من الأسرار مباشرة.
-
----
-
-بهذا أصبحت المفاتيح محمية تماماً. هل تريد أيضاً تعديل باقي أجزاء الكود لتحسين الاستراتيجية كما ناقشنا (وقف خسارة، أوامر Limit، إلخ) أم نكتفي بهذا القدر؟
-
 # ================= بروكسيات =================
 
 def fetch_free_proxies():

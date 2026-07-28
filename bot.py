@@ -28,14 +28,14 @@ TELEGRAM_TOKEN = cfg.telegram_token
 TELEGRAM_CHAT_ID = cfg.telegram_chat_id
 
 SYMBOL = 'SOLUSDT'
-BUY_AMOUNT_USD = 5.0
+BUY_AMOUNT_USD = 7.0
 TAKER_FEE_PERCENT = 0.001
 MIN_PROFIT_USD = 0.1  # هامش أمان فوق سعر التعادل لضمان عدم الخسارة مطلقا
 
 JSON_FILE = 'sh.json'
 MAX_OPEN_POSITIONS = 1
 REBUY_WAIT_MINUTES = 10
-SLEEP_SECONDS = 1
+SLEEP_SECONDS = 7
 # تم ضبط الوقت على 5.8 لضمان الإغلاق الآمن وحفظ البيانات قبل إيقاف GitHub الإجباري بعد 6 ساعات
 RUN_DURATION_HOURS = 5.8 
 

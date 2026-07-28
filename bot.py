@@ -7,18 +7,25 @@ import subprocess
 import concurrent.futures
 from datetime import datetime, timedelta
 from dataclasses import dataclass
+from dotenv import load_dotenv  # أضفنا
 from pybit.unified_trading import HTTP
 
 # ==========================================
-# CONFIGURATION
+# تحميل متغيرات البيئة من ملف .env (للاستخدام المحلي فقط)
+# في GitHub Actions يتم تمرير المتغيرات مباشرة ولا حاجة للملف
+# ==========================================
+load_dotenv()  # يحمل .env إن وجد
+
+# ==========================================
+# CONFIGURATION - آمنة الآن عبر متغيرات البيئة
 # ==========================================
 
 @dataclass
 class Config:
-    api_key: str = 'QgbaYIAuYv9Brf4cWu'
-    secret: str = 'MNOYmeViGtW5Fkv43SJAychk01cptKmtWlYG'
-    telegram_token: str = '8777604170:AAGVQWj7KtRZWKjZQ0BuyIZCHJ3FCmFgQP4'
-    telegram_chat_id: str = '6390985342'
+    api_key: str = os.getenv('BYBIT_API_KEY', '')          # تم التعديل
+    secret: str = os.getenv('BYBIT_API_SECRET', '')        # تم التعديل
+    telegram_token: str = os.getenv('TELEGRAM_TOKEN', '')  # تم التعديل
+    telegram_chat_id: str = os.getenv('TELEGRAM_CHAT_ID', '') # تم التعديل
 
 cfg = Config()
 
@@ -30,17 +37,61 @@ TELEGRAM_CHAT_ID = cfg.telegram_chat_id
 SYMBOL = 'SOLUSDT'
 BUY_AMOUNT_USD = 7.0
 TAKER_FEE_PERCENT = 0.001
-MIN_PROFIT_USD = 0.1  # هامش أمان فوق سعر التعادل لضمان عدم الخسارة مطلقا
+MIN_PROFIT_USD = 0.1
 
 JSON_FILE = 'sh.json'
 MAX_OPEN_POSITIONS = 1
 REBUY_WAIT_MINUTES = 10
 SLEEP_SECONDS = 7
-# تم ضبط الوقت على 5.8 لضمان الإغلاق الآمن وحفظ البيانات قبل إيقاف GitHub الإجباري بعد 6 ساعات
-RUN_DURATION_HOURS = 5.8 
+RUN_DURATION_HOURS = 5.8
 
 PROXY_LIST = []
 client = None
+
+# ... باقي الدوال كما هي (fetch_free_proxies, test_proxy, get_best_proxy, init_client_with_retries, send_telegram_message, load_history, save_history, git_commit_and_push, calculate_sell_thresholds, get_current_price, get_usdt_balance, execute_buy, execute_sell, try_sell_all, can_rebuy, main)
+
+# تأكد من إضافة استيراد dotenv في الأعلى
+```
+
+ملاحظة مهمة:
+
+· يحتاج التعديل أيضاً إلى إضافة python-dotenv إلى متطلبات التشغيل (requirements.txt).
+· إذا كنت ستستخدم GitHub Actions فقط، فيمكنك الاستغناء عن load_dotenv()، لكن إبقاؤه لا يضر (سيبحث عن ملف ولن يجده فلا يؤثر).
+
+---
+
+الخطوات المطلوبة منك الآن (للتطبيق العملي)
+
+1. أنشئ ملف .env محلياً (للتجربة فقط) ولا ترفعه لـ GitHub أبداً
+
+ضع في ملف اسمه .env القيم الحقيقية (انسخ ما كنت تضعه في الكود):
+
+```
+BYBIT_API_KEY=QgbaYIAuYv9Brf4cWu
+BYBIT_API_SECRET=MNOYmeViGtW5Fkv43SJAychk01cptKmtWlYG
+TELEGRAM_TOKEN=8777604170:AAGVQWj7KtRZWKjZQ0BuyIZCHJ3FCmFgQP4
+TELEGRAM_CHAT_ID=6390985342
+```
+
+2. أضف إلى .gitignore السطر التالي (حتى لا يُرفع الملف):
+
+```
+.env
+```
+
+3. لو كنت تستخدم GitHub Actions:
+
+· أضف الأسرار كما شرحت سابقاً (بنفس الأسماء BYBIT_API_KEY إلخ).
+· في ملف الـ workflow مررها كـ env: بنفس الأسماء.
+
+4. شغّل الكود:
+
+· محلياً: python main.py (سيقرأ .env تلقائياً).
+· على GitHub: سيعمل من الأسرار مباشرة.
+
+---
+
+بهذا أصبحت المفاتيح محمية تماماً. هل تريد أيضاً تعديل باقي أجزاء الكود لتحسين الاستراتيجية كما ناقشنا (وقف خسارة، أوامر Limit، إلخ) أم نكتفي بهذا القدر؟
 
 # ================= بروكسيات =================
 

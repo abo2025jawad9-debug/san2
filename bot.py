@@ -36,6 +36,7 @@ MIN_PROFIT_USD = 0.05  # هامش أمان فوق سعر التعادل لضما
 JSON_FILE = 'sh.json'
 MAX_OPEN_POSITIONS = 1
 REBUY_WAIT_MINUTES = 10
+REBUY_PRICE_DROP_PERCENT = 0.5  # النسبة المئوية للانخفاض المطلوب (0.5 تعني 0.5%)
 SLEEP_SECONDS = 7
 # تم ضبط الوقت على 5.8 لضمان الإغلاق الآمن وحفظ البيانات قبل إيقاف GitHub الإجباري بعد 6 ساعات
 RUN_DURATION_HOURS = 5.8 
@@ -513,14 +514,19 @@ def can_rebuy(history, current_price):
     elapsed = datetime.utcnow() - last_time
     elapsed_min = elapsed.total_seconds() / 60
 
-    print("[REBUY] آخِرُ شِرَاءٍ: %.2f | الحَالِيُّ: %.2f | مَرَّتْ: %.1f دَقِيقَة" % (last_price, current_price, elapsed_min))
+    # حساب السعر المستهدف (انخفاض بنسبة REBUY_PRICE_DROP_PERCENT)
+    required_drop_price = last_price * (1 - (REBUY_PRICE_DROP_PERCENT / 100))
+
+    print("[REBUY] آخِرُ شِرَاءٍ: %.2f | الحَالِيُّ: %.2f | المَطْلُوبُ أَقَلَّ مِنْ: %.2f (انْخِفَاضٌ %.2f%%)" % 
+          (last_price, current_price, required_drop_price, REBUY_PRICE_DROP_PERCENT))
 
     if elapsed < timedelta(minutes=REBUY_WAIT_MINUTES):
         print("[REBUY] لَمْ تَتَحَقَّقْ: مَرَّتْ %.1f دَقِيقَة فَقَطْ (المَطْلُوبُ %d)" % (elapsed_min, REBUY_WAIT_MINUTES))
         return False
 
-    if current_price >= last_price:
-        print("[REBUY] لَمْ تَتَحَقَّقْ: السِّعْرُ %.2f لَيْسَ أَقَلَّ مِنْ %.2f" % (current_price, last_price))
+    if current_price >= required_drop_price:
+        print("[REBUY] لَمْ تَتَحَقَّقْ: السِّعْرُ %.2f لَيْسَ أَقَلَّ مِنْ %.2f (يَلْزَمُ انْخِفَاضٌ %.2f%%)" % 
+              (current_price, required_drop_price, REBUY_PRICE_DROP_PERCENT))
         return False
 
     print("[REBUY] تَحَقَّقَتْ جَمِيعُ الشُّرُوطِ!")
@@ -593,15 +599,17 @@ def main():
                                     print("│ [شِرَاءٌ] لَا تُوجَدُ أَيُّ صَفَقَاتٍ فِي السِّجِلِّ! شِرَاءٌ فَوْرِيٌّ...")
                                     create_buy_operation()
                                 else:
+                                    # حساب السعر المستهدف بناءً على النسبة المحددة
+                                    required_drop_price = abs_last_buy_price * (1 - (REBUY_PRICE_DROP_PERCENT / 100))
                                     if elapsed_since_sell >= 60.0:
                                         print("│ [شِرَاءٌ] مَرَّتْ سَاعَةٌ كَامِلَةٌ بِدُونِ صَفَقَاتٍ مَفْتُوحَةٍ (تَفْرِيغُ الذَّاكِرَةِ). تَجَاهُلُ آخِرِ سِعْرٍ (%.2f) وَالشِّرَاءُ الحَالِيُّ (%.2f)..." % (abs_last_buy_price, current_price))
                                         create_buy_operation()
-                                    elif current_price <= abs_last_buy_price:
-                                        print("│ [شِرَاءٌ] مَرَّتْ 10 دَقَائِقَ، وَالسِّعْرُ (%.2f) <= آخِرِ شِرَاءٍ (%.2f). جَارِي الشِّرَاءُ..." % (current_price, abs_last_buy_price))
+                                    elif current_price <= required_drop_price:
+                                        print("│ [شِرَاءٌ] مَرَّتْ 10 دَقَائِقَ، وَالسِّعْرُ (%.2f) <= السِّعْرُ المُسْتَهْدَفُ (%.2f) (انْخِفَاضٌ %.2f%%). جَارِي الشِّرَاءُ..." % (current_price, required_drop_price, REBUY_PRICE_DROP_PERCENT))
                                         create_buy_operation()
                                     else:
                                         minutes_left = 60.0 - elapsed_since_sell
-                                        print("│ [تَجَاوُزٌ] السِّعْرُ (%.2f) أَكْبَرُ مِنْ آخِرِ شِرَاءٍ (%.2f). نَنْتَظِرُ اِنْخِفَاضَهُ أَوْ مُرُورَ (%.1f) دَقِيقَة لِنِسْيَانِ السِّعْرِ..." % (current_price, abs_last_buy_price, minutes_left))
+                                        print("│ [تَجَاوُزٌ] السِّعْرُ (%.2f) لَمْ يَنْخَفِضْ %.2f%% عَنْ آخِرِ شِرَاءٍ (%.2f). نَنْتَظِرُ اِنْخِفَاضَهُ أَوْ مُرُورَ (%.1f) دَقِيقَة لِنِسْيَانِ السِّعْرِ..." % (current_price, REBUY_PRICE_DROP_PERCENT, abs_last_buy_price, minutes_left))
                             elif can_rebuy(history, current_price):
                                 print("│ [شِرَاءٌ] يَشْتَرِي! الشُّرُوطُ مُطَابِقَةٌ...")
                                 create_buy_operation()

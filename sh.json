@@ -1,7 +1,7 @@
 {
     "buy_d16710fd": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-07-29",
         "time": "00:53:59.481527",
         "buy_time": "2026-07-29T00:53:59.481527",
@@ -14,6 +14,15 @@
         "total_cost": 6.0093,
         "break_even_price": 74.1,
         "min_sell_price": 74.81,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_84b3bdaa",
+            "sell_price": 74.9,
+            "received_usd": 6.0669,
+            "sell_fee_usd": 0.0061,
+            "profit_usd": 0.0575,
+            "profit_percent": 0.958,
+            "sell_date": "2026-07-30",
+            "sell_time": "13:50:08.951825"
+        }
     }
 }

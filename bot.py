@@ -28,7 +28,7 @@ TELEGRAM_TOKEN = cfg.telegram_token
 TELEGRAM_CHAT_ID = cfg.telegram_chat_id
 
 SYMBOL = 'SOLUSDT'
-BUY_AMOUNT_USD = 6.5
+BUY_AMOUNT_USD = 70
 TAKER_FEE_PERCENT = 0.001
 MIN_PROFIT_USD = 0.1  
 
@@ -36,7 +36,7 @@ MIN_PROFIT_USD = 0.1
 # النسبة المئوية المسموح بها فوق أدنى سعر (قاع) لآخر 24 ساعة.
 # قيمة (1.5) تعني: البوت لن يشتري إلا إذا كان السعر الحالي لا يرتفع بأكثر من 1.5% عن قاع اليوم.
 # يمكنك تقليلها إلى (1.0) ليكون البوت أكثر صرامة، أو رفعها إذا أردت تسريع الشراء.
-BUY_NEAR_24H_LOW_PCT = 1.5 
+BUY_NEAR_24H_LOW_PCT = 1.0 
 
 JSON_FILE = 'sh.json'
 MAX_OPEN_POSITIONS = 1

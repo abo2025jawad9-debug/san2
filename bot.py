@@ -10,12 +10,11 @@ from dataclasses import dataclass
 from pybit.unified_trading import HTTP
 
 # ==========================================
-# CONFIGURATION
+# CONFIGURATION (الإعدادات)
 # ==========================================
 
 @dataclass
 class Config:
-    # استخدام os.getenv لسحب القيم من سيرفرات GitHub بأمان تام
     api_key: str = os.getenv('BYBIT_API_KEY')
     secret: str = os.getenv('BYBIT_API_SECRET')
     telegram_token: str = os.getenv('TELEGRAM_TOKEN')
@@ -31,19 +30,25 @@ TELEGRAM_CHAT_ID = cfg.telegram_chat_id
 SYMBOL = 'SOLUSDT'
 BUY_AMOUNT_USD = 6.5
 TAKER_FEE_PERCENT = 0.001
-MIN_PROFIT_USD = 0.1  # هامش أمان فوق سعر التعادل لضمان عدم الخسارة مطلقا
+MIN_PROFIT_USD = 0.1  
+
+# [تعديلات الاستراتيجية الجديدة - الأمر المعلق الذكي]
+# النسبة المئوية المسموح بها فوق أدنى سعر (قاع) لآخر 24 ساعة.
+# قيمة (1.5) تعني: البوت لن يشتري إلا إذا كان السعر الحالي لا يرتفع بأكثر من 1.5% عن قاع اليوم.
+# يمكنك تقليلها إلى (1.0) ليكون البوت أكثر صرامة، أو رفعها إذا أردت تسريع الشراء.
+BUY_NEAR_24H_LOW_PCT = 1.5 
 
 JSON_FILE = 'sh.json'
 MAX_OPEN_POSITIONS = 1
 REBUY_WAIT_MINUTES = 10
 SLEEP_SECONDS = 7
-# تم ضبط الوقت على 5.8 لضمان الإغلاق الآمن وحفظ البيانات قبل إيقاف GitHub الإجباري بعد 6 ساعات
 RUN_DURATION_HOURS = 5.8 
 
 PROXY_LIST = []
 client = None
 
 # ================= بروكسيات =================
+# [تم الاحتفاظ بدوال البروكسي كما هي لضمان عمل البوت على الخوادم]
 
 def fetch_free_proxies():
     proxies = []
@@ -76,7 +81,6 @@ def test_proxy(proxy_url):
     try:
         proxies = {"http": proxy_url, "https": proxy_url}
         start = time.time()
-        # الفحص يتجه الآن إلى واجهة Bybit
         response = requests.get("https://api.bybit.com/v5/market/time", proxies=proxies, timeout=3)
         if response.status_code == 200:
             latency = time.time() - start
@@ -126,18 +130,15 @@ def init_client_with_retries():
                 continue
 
             try:
-                # إجبار النظام على استخدام البروكسي لتجنب خطأ pybit غير الداعم لمتغير proxies
                 os.environ['HTTP_PROXY'] = proxy['http']
                 os.environ['HTTPS_PROXY'] = proxy['https']
 
-                # تهيئة عميل Bybit بالمال الحقيقي
                 client = HTTP(
                     testnet=False,
                     api_key=API_KEY,
                     api_secret=API_SECRET
                 )
                 
-                # فحص الاتصال بالحساب
                 client.get_wallet_balance(accountType="UNIFIED", coin="USDT")
                 print("[INIT] تَمَّ الاِتِّصَالُ بِنَجَاحٍ! البُرُوكْسِي: %s" % proxy['http'])
                 return True
@@ -146,7 +147,6 @@ def init_client_with_retries():
                 if proxy['http'] in PROXY_LIST:
                     PROXY_LIST.remove(proxy['http'])
                 
-                # تنظيف متغيرات البيئة قبل تجربة بروكسي آخر
                 os.environ.pop('HTTP_PROXY', None)
                 os.environ.pop('HTTPS_PROXY', None)
             
@@ -156,7 +156,7 @@ def init_client_with_retries():
         PROXY_LIST = []
         time.sleep(5)
 
-# ================= تليجرام =================
+# ================= تليجرام وإدارة الملفات =================
 
 def send_telegram_message(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -172,8 +172,6 @@ def send_telegram_message(message):
             pass
         time.sleep(2)
     return False
-
-# ================= إدارة الملفات =================
 
 def load_history():
     if os.path.exists(JSON_FILE):
@@ -227,25 +225,27 @@ def calculate_sell_thresholds(buy_price, qty, buy_fee_usd):
 
 # ================= عمليات السوق =================
 
-def get_current_price():
+def get_market_data():
+    """
+    [تعديل]: دالة جديدة تجلب السعر الحالي بالإضافة إلى أدنى سعر في آخر 24 ساعة
+    """
     try:
         res = client.get_tickers(category="spot", symbol=SYMBOL)
         ticker = float(res['result']['list'][0]['lastPrice'])
-        print("[PRICE] السِّعْرُ الحَالِيُّ: %.2f" % ticker)
-        return ticker
+        low_24h = float(res['result']['list'][0]['lowPrice24h'])
+        print("[PRICE] السِّعْرُ الحَالِيُّ: %.2f | قَاعُ 24 سَاعَة: %.2f" % (ticker, low_24h))
+        return ticker, low_24h
     except Exception as e:
-        print("[PRICE] فَشَلٌ فِي جَلْبِ السِّعْرِ: %s" % e)
-        return None
+        print("[PRICE] فَشَلٌ فِي جَلْبِ البَيَانَاتِ: %s" % e)
+        return None, None
 
 def get_usdt_balance():
     try:
-        # جلب الرصيد لدعم الحسابات الموحدة في Bybit
         res = client.get_wallet_balance(accountType="UNIFIED", coin="USDT")
         balance = float(res['result']['list'][0]['coin'][0]['walletBalance'])
         return balance
     except Exception as e:
         try:
-            # احتياطي للحسابات الكلاسيكية (Spot)
             res = client.get_wallet_balance(accountType="SPOT", coin="USDT")
             balance = float(res['result']['list'][0]['coin'][0]['walletBalance'])
             return balance
@@ -255,7 +255,7 @@ def get_usdt_balance():
 def execute_buy():
     for attempt in range(1, 4):
         try:
-            current_price = get_current_price()
+            current_price, _ = get_market_data()
             order = client.place_order(
                 category="spot",
                 symbol=SYMBOL,
@@ -266,7 +266,7 @@ def execute_buy():
             )
             
             order_id = order['result']['orderId']
-            time.sleep(1.5)  # انتظار بسيط لمعالجة العملية وجلب رسوم التنفيذ
+            time.sleep(1.5) 
             
             exec_res = client.get_executions(category="spot", orderId=order_id)
             fills = exec_res['result']['list']
@@ -302,7 +302,6 @@ def execute_buy():
 def execute_sell(qty):
     for attempt in range(1, 4):
         try:
-            # معالجة دقة التداول لتجنب أخطاء المنصة
             info = client.get_instruments_info(category="spot", symbol=SYMBOL)
             step_str = info['result']['list'][0]['lotSizeFilter']['basePrecision']
             step = float(step_str)
@@ -513,17 +512,12 @@ def can_rebuy(history, current_price):
     elapsed = datetime.utcnow() - last_time
     elapsed_min = elapsed.total_seconds() / 60
 
-    print("[REBUY] آخِرُ شِرَاءٍ: %.2f | الحَالِيُّ: %.2f | مَرَّتْ: %.1f دَقِيقَة" % (last_price, current_price, elapsed_min))
-
     if elapsed < timedelta(minutes=REBUY_WAIT_MINUTES):
-        print("[REBUY] لَمْ تَتَحَقَّقْ: مَرَّتْ %.1f دَقِيقَة فَقَطْ (المَطْلُوبُ %d)" % (elapsed_min, REBUY_WAIT_MINUTES))
         return False
 
     if current_price >= last_price:
-        print("[REBUY] لَمْ تَتَحَقَّقْ: السِّعْرُ %.2f لَيْسَ أَقَلَّ مِنْ %.2f" % (current_price, last_price))
         return False
 
-    print("[REBUY] تَحَقَّقَتْ جَمِيعُ الشُّرُوطِ!")
     return True
 
 # ================= الدالة الرئيسية =================
@@ -555,8 +549,9 @@ def main():
             
             print("\n┌─────────────────────────────────────┐")
             
-            current_price = get_current_price()
-            if current_price is None:
+            # [تعديل] جلب السعر الحالي وقاع 24 ساعة في نفس الوقت
+            current_price, low_24h = get_market_data()
+            if current_price is None or low_24h is None:
                 print("│ [LOOP] فَشَلٌ فِي جَلْبِ السِّعْرِ، جَارِي الإِعَادَةُ...")
                 time.sleep(5)
                 continue
@@ -573,40 +568,57 @@ def main():
             else:
                 print("│ [النَّتِيجَةُ] لَمْ يَبِعْ → فَحْصُ إِعَادَةِ الشِّرَاءِ...")
                 if open_count < MAX_OPEN_POSITIONS:
-                    if current_price > 73.20:
-                        print("│ [تَجَاوُزٌ] السِّعْرُ الحَالِيُّ (%.2f) أَكْبَرُ مِنْ 69.70. تَمَّ إِيقَافُ الشِّرَاءِ." % current_price)
-                    else:
-                        last_sell_time = get_last_sell_time(history)
-                        wait_sell_ok = True
-                        elapsed_since_sell = 0.0
-                        
-                        if last_sell_time:
-                            elapsed_since_sell = (datetime.utcnow() - last_sell_time).total_seconds() / 60
-                            if elapsed_since_sell < 10.0:
-                                print("│ [تَجَاوُزٌ] اِنْتِظَارُ 10 دَقَائِقَ بَعْدَ البَيْعِ. (مَرَّتْ %.1f دَقِيقَة)" % elapsed_since_sell)
-                                wait_sell_ok = False
-                        
-                        if wait_sell_ok:
-                            if open_count == 0:
-                                abs_last_buy_price = get_absolute_last_buy_price(history)
-                                if abs_last_buy_price is None:
-                                    print("│ [شِرَاءٌ] لَا تُوجَدُ أَيُّ صَفَقَاتٍ فِي السِّجِلِّ! شِرَاءٌ فَوْرِيٌّ...")
+                    
+                    # [الاستراتيجية الجديدة] حساب منطقة الشراء الآمنة (الأمر المعلق)
+                    limit_buy_target = low_24h * (1 + (BUY_NEAR_24H_LOW_PCT / 100))
+                    is_price_in_buy_zone = (current_price <= limit_buy_target)
+                    
+                    print("│ [إِسْتِرَاتِيجِيَّة] هَدَفُ الشِّرَاءِ المُعَلَّقِ: <= %.2f (السِّعْرُ الحَالِيُّ: %.2f)" % (limit_buy_target, current_price))
+
+                    last_sell_time = get_last_sell_time(history)
+                    wait_sell_ok = True
+                    elapsed_since_sell = 0.0
+                    
+                    if last_sell_time:
+                        elapsed_since_sell = (datetime.utcnow() - last_sell_time).total_seconds() / 60
+                        if elapsed_since_sell < 10.0:
+                            print("│ [تَجَاوُزٌ] اِنْتِظَارُ 10 دَقَائِقَ بَعْدَ البَيْعِ. (مَرَّتْ %.1f دَقِيقَة)" % elapsed_since_sell)
+                            wait_sell_ok = False
+                    
+                    if wait_sell_ok:
+                        if open_count == 0:
+                            abs_last_buy_price = get_absolute_last_buy_price(history)
+                            if abs_last_buy_price is None:
+                                # حالة بدء البوت لأول مرة بدون تاريخ
+                                if is_price_in_buy_zone:
+                                    print("│ [شِرَاءٌ] السِّعْرُ هَبَطَ لِمِنْطَقَةِ القَاعِ! جَارِي التَّنْفِيذُ فَوْراً...")
                                     create_buy_operation()
                                 else:
-                                    if elapsed_since_sell >= 60.0:
-                                        print("│ [شِرَاءٌ] مَرَّتْ سَاعَةٌ كَامِلَةٌ بِدُونِ صَفَقَاتٍ مَفْتُوحَةٍ (تَفْرِيغُ الذَّاكِرَةِ). تَجَاهُلُ آخِرِ سِعْرٍ (%.2f) وَالشِّرَاءُ الحَالِيُّ (%.2f)..." % (abs_last_buy_price, current_price))
-                                        create_buy_operation()
-                                    elif current_price <= abs_last_buy_price:
-                                        print("│ [شِرَاءٌ] مَرَّتْ 10 دَقَائِقَ، وَالسِّعْرُ (%.2f) <= آخِرِ شِرَاءٍ (%.2f). جَارِي الشِّرَاءُ..." % (current_price, abs_last_buy_price))
+                                    print("│ [تَجَاوُزٌ] السِّعْرُ مُرْتَفِعٌ. نَنْتَظِرُ هُبُوطَهُ لِمِنْطَقَةِ الشِّرَاءِ الآمِنَةِ.")
+                            else:
+                                if elapsed_since_sell >= 60.0:
+                                    if is_price_in_buy_zone:
+                                        print("│ [شِرَاءٌ] مَرَّتْ سَاعَةٌ كَامِلَةٌ وَالسِّعْرُ فِي القَاعِ. جَارِي الشِّرَاءُ...")
                                         create_buy_operation()
                                     else:
-                                        minutes_left = 60.0 - elapsed_since_sell
-                                        print("│ [تَجَاوُزٌ] السِّعْرُ (%.2f) أَكْبَرُ مِنْ آخِرِ شِرَاءٍ (%.2f). نَنْتَظِرُ اِنْخِفَاضَهُ أَوْ مُرُورَ (%.1f) دَقِيقَة لِنِسْيَانِ السِّعْرِ..." % (current_price, abs_last_buy_price, minutes_left))
-                            elif can_rebuy(history, current_price):
-                                print("│ [شِرَاءٌ] يَشْتَرِي! الشُّرُوطُ مُطَابِقَةٌ...")
+                                        print("│ [تَجَاوُزٌ] مَرَّتْ سَاعَةٌ لَكِنَّ السِّعْرَ لَمْ يَصِلْ لِلْقَاعِ بَعْدُ.")
+                                elif current_price <= abs_last_buy_price:
+                                    if is_price_in_buy_zone:
+                                        print("│ [شِرَاءٌ] السِّعْرُ أَقَلُّ مِنْ آخِرِ شِرَاءٍ وَفِي قَاعِ 24 سَاعَة. جَارِي الشِّرَاءُ...")
+                                        create_buy_operation()
+                                    else:
+                                        print("│ [تَجَاوُزٌ] السِّعْرُ أَقَلُّ مِنْ آخِرِ شِرَاءٍ، لَكِنَّهُ لَيْسَ فِي القَاعِ الْمَطْلُوبِ.")
+                                else:
+                                    minutes_left = 60.0 - elapsed_since_sell
+                                    print("│ [تَجَاوُزٌ] نَنْتَظِرُ اِنْخِفَاضَهُ أَوْ مُرُورَ (%.1f) دَقِيقَة..." % minutes_left)
+                        elif can_rebuy(history, current_price):
+                            if is_price_in_buy_zone:
+                                print("│ [شِرَاءٌ] يَشْتَرِي! الشُّرُوطُ مُطَابِقَةٌ لِإِعَادَةِ الشِّرَاءِ فِي القَاعِ...")
                                 create_buy_operation()
                             else:
-                                print("│ [تَجَاوُزٌ] شُرُوطُ الشِّرَاءِ لَمْ تَتَحَقَّقْ بَعْدُ.")
+                                 print("│ [تَجَاوُزٌ] شُرُوطُ إِعَادَةِ الشِّرَاءِ تَحَقَّقَتْ، لَكِنَّ السِّعْرَ لَيْسَ فِي القَاعِ.")
+                        else:
+                            print("│ [تَجَاوُزٌ] شُرُوطُ الشِّرَاءِ التَّقْلِيدِيَّةِ لَمْ تَتَحَقَّقْ بَعْدُ.")
                 else:
                     print("│ [تَحْذِيرٌ] تَمَّ بُلُوغُ الحَدِّ الأَقْصَى لِلصَّفَقَاتِ (%d)." % MAX_OPEN_POSITIONS)
 
@@ -626,4 +638,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

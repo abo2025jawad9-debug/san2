@@ -38,6 +38,9 @@ MIN_PROFIT_USD = 0.05
 # يمكنك تقليلها إلى (1.0) ليكون البوت أكثر صرامة، أو رفعها إذا أردت تسريع الشراء.
 BUY_NEAR_24H_LOW_PCT = 0.3 
 
+# الفارق السعري المطلوب بين كل صفقة والتي تليها (بالدولار)
+PRICE_STEP_USD = 0.10
+    
 JSON_FILE = 'sh.json'
 MAX_OPEN_POSITIONS = 1
 REBUY_WAIT_MINUTES = 10

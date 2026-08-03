@@ -518,7 +518,7 @@ def can_rebuy(history, current_price):
     if elapsed < timedelta(minutes=REBUY_WAIT_MINUTES):
         return False
 
-    if current_price >= last_price:
+    if current_price > (last_price - PRICE_STEP_USD):
         return False
 
     return True

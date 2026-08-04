@@ -259,6 +259,16 @@ def execute_buy():
     for attempt in range(1, 4):
         try:
             current_price, _ = get_market_data()
+            
+            # === فحص الرصيد المتاح قبل إرسال أمر الشراء ===
+            current_balance = get_usdt_balance()
+            
+            if current_balance < BUY_AMOUNT_USD:
+                print(f"[BUY_WAIT] الرصيد المتاح ({current_balance}$) لا يكفي للشراء. جاري العودة للمراقبة...")
+                # العودة فوراً لدورة المراقبة دون تجميد البوت
+                return None, 0, 0, 0, 0
+            # ==============================================
+            
             order = client.place_order(
                 category="spot",
                 symbol=SYMBOL,

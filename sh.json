@@ -1,1 +1,19 @@
-
+{
+    "buy_2bb6a955": {
+        "type": "buy",
+        "status": "معلقة - جاري الانتظار",
+        "date": "2026-08-05",
+        "time": "13:31:44.538035",
+        "buy_time": "2026-08-05T13:31:44.538035",
+        "buy_price": 73.61,
+        "qty": 0.0964,
+        "sellable_qty": 0.0963036,
+        "buy_amount_usd": 7.1,
+        "buy_fee_usd": 0.0071,
+        "buy_cost": 7.096,
+        "total_cost": 7.1102,
+        "break_even_price": 73.76,
+        "min_sell_price": 74.28,
+        "sell_details": {}
+    }
+}

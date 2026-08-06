@@ -53,7 +53,7 @@
     },
     "buy_aa22229b": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-08-06",
         "time": "02:18:57.453755",
         "buy_time": "2026-08-06T02:18:57.453755",
@@ -66,6 +66,15 @@
         "total_cost": 7.1137,
         "break_even_price": 73.72,
         "min_sell_price": 74.24,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_73f951f4",
+            "sell_price": 74.21,
+            "received_usd": 7.1538,
+            "sell_fee_usd": 0.0072,
+            "profit_usd": 0.0401,
+            "profit_percent": 0.564,
+            "sell_date": "2026-08-06",
+            "sell_time": "05:08:13.968141"
+        }
     }
 }

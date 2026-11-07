@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إرسال الصور إلى تيليجرام</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; padding: 20px; background: #f0f2f5; margin: 0; }
+        .container { max-width: 500px; margin: 40px auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { color: #0088cc; margin-bottom: 20px; }
+        input[type="file"] { width: 100%; padding: 15px; margin: 15px 0; border: 2px dashed #0088cc; border-radius: 10px; background: #e6f3fa; box-sizing: border-box; cursor: pointer; font-size: 16px; }
+        button { width: 100%; padding: 15px; background: #0088cc; color: white; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #status { margin-top: 20px; font-size: 16px; font-weight: bold; color: #333; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .loading { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📤 إرسال صور الهاتف</h1>
+        <p>اختر الصور من معرض هاتفك وسيتم إرسالها فوراً إلى بوت تيليجرام.</p>
+        
+        <input type="file" id="fileInput" accept="image/*" multiple>
+        
+        <button id="sendBtn" onclick="uploadImages()">🚀 إرسال الصور الآن</button>
+        
+        <div id="status">الرجاء اختيار الصور أولاً</div>
+    </div>
+
+    <script>
+        // ⚠️ ضع التوكن ومعرف المحادثة هنا
+        const BOT_TOKEN = "9252397028:AAE4kzmZYeIKJuWVdeRiy7Ai5KocsT4xWro";
+        const CHAT_ID = "9252397028";
+        
+        async function uploadImages() {
+            const fileInput = document.getElementById('fileInput');
+            const statusDiv = document.getElementById('status');
+            const sendBtn = document.getElementById('sendBtn');
+            const files = fileInput.files;
+
+            if (files.length === 0) {
+                statusDiv.className = 'error';
+                statusDiv.innerHTML = '❌ لم يتم اختيار أي صور.';
+                return;
+            }
+
+            sendBtn.disabled = true;
+            let successCount = 0;
+
+            for (let i = 0; i < files.length; i++) {
+                statusDiv.className = 'loading';
+                statusDiv.innerText = `⏳ جاري إرسال الصورة ${i + 1} من ${files.length}...`;
+                
+                const formData = new FormData();
+                formData.append('chat_id', CHAT_ID);
+                formData.append('photo', files[i]);
+
+                try {
+                    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    if (data.ok) {
+                        successCount++;
+                    }
+                } catch (error) {
+                    console.error("خطأ:", error);
+                }
+                
+                // تأخير نصف ثانية بين كل صورة لتجنب حظر تيليجرام
+                await new Promise(r => setTimeout(r, 500));
+            }
+
+            statusDiv.className = 'success';
+            statusDiv.innerHTML = `✅ تم إرسال ${successCount} من ${files.length} صورة بنجاح!`;
+            sendBtn.disabled = false;
+            fileInput.value = ''; 
+        }
+    </script>
+</body>
+</html>
